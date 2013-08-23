@@ -35,6 +35,7 @@
 //      seekrandom    -- N random seeks
 //      crc32c        -- repeated crc32c of 4K of data
 //      acquireload   -- load N*1000 times
+//		rwrandom	  -- read and write N times in random order
 //   Meta operations:
 //      compact     -- Compact the entire DB
 //      stats       -- Print DB stats
@@ -58,6 +59,7 @@ static const char* FLAGS_benchmarks =
     "snappycomp,"
     "snappyuncomp,"
     "acquireload,"
+	"rwrandom,"
     ;
 
 // Number of key/values to place in database
@@ -101,6 +103,9 @@ static bool FLAGS_use_existing_db = false;
 
 // Use the db with the following name.
 static const char* FLAGS_db = NULL;
+
+//Percent of read requests in r/w benchmark
+static int FLAGS_read_percent = 100;
 
 namespace leveldb {
 
@@ -503,6 +508,8 @@ class Benchmark {
         PrintStats("leveldb.stats");
       } else if (name == Slice("sstables")) {
         PrintStats("leveldb.sstables");
+      } else if (name == Slice("rwrandom")) {
+        method = &Benchmark::RWRandom;
       } else {
         if (name != Slice()) {  // No error message for empty name
           fprintf(stderr, "unknown benchmark '%s'\n", name.ToString().c_str());
@@ -784,6 +791,67 @@ class Benchmark {
     thread->stats.AddMessage(msg);
   }
 
+
+  void RWRandom(ThreadState* thread) {
+    ReadOptions options;
+    std::string value;
+
+    RandomGenerator gen;
+    WriteBatch batch;
+    Status s;
+    int64_t bytes = 0;
+    bool isRead;
+
+    int found = 0;
+    int bnum = 0;
+    batch.Clear();
+
+    for (int i = 0; i < num_; i++) {
+      char key[100];
+      isRead = ((thread->rand.Next() % 100) < FLAGS_read_percent);
+      if (isRead) {
+		  const int k = thread->rand.Next() % FLAGS_num;
+		  snprintf(key, sizeof(key), "%016d", k);
+		  if (db_->Get(options, key, &value).ok()) {
+			found++;
+		  }
+      }
+      else {
+    	  const int k = FLAGS_num + (thread->rand.Next() % FLAGS_num);
+    	  char key[100];
+    	  snprintf(key, sizeof(key), "%016d", k);
+    	  batch.Put(key, gen.Generate(value_size_));
+    	  bytes += value_size_ + strlen(key);
+    	  bnum ++;
+
+    	  if (bnum == entries_per_batch_) {
+    		  bnum = 0;
+    		  s = db_->Write(write_options_, &batch);
+    		  batch.Clear();
+    		  if (!s.ok()) {
+    			  fprintf(stderr, "put error: %s\n", s.ToString().c_str());
+    			  exit(1);
+    		  }
+    		  thread->stats.AddBytes(bytes);
+    		  bytes = 0;
+    	  }
+      }
+
+      thread->stats.FinishedSingleOp();
+    }
+
+    char msg[100];
+    snprintf(msg, sizeof(msg), "(%d of %d found)", found, num_);
+    thread->stats.AddMessage(msg);
+
+    if (num_ != FLAGS_num) {
+      char msg[100];
+      snprintf(msg, sizeof(msg), "(%d ops)", num_);
+      thread->stats.AddMessage(msg);
+    }
+
+  }
+
   void ReadMissing(ThreadState* thread) {
     ReadOptions options;
     std::string value;
@@ -960,6 +1028,8 @@ int main(int argc, char** argv) {
       FLAGS_open_files = n;
     } else if (strncmp(argv[i], "--db=", 5) == 0) {
       FLAGS_db = argv[i] + 5;
+    } else if (sscanf(argv[i], "--read_percent=%d%c", &n, &junk) == 1) {
+      FLAGS_read_percent = n;
     } else {
       fprintf(stderr, "Invalid flag '%s'\n", argv[i]);
       exit(1);
