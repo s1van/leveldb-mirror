@@ -7,7 +7,9 @@
 #include "db/filename.h"
 #include "leveldb/env.h"
 #include "leveldb/table.h"
+#include "leveldb/debug.h"
 #include "util/coding.h"
+
 
 namespace leveldb {
 
@@ -51,6 +53,7 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
   *handle = cache_->Lookup(key);
   if (*handle == NULL) {
     std::string fname = TableFileName(dbname_, file_number);
+    DEBUG_INFO("FindTable", fname);
     RandomAccessFile* file = NULL;
     Table* table = NULL;
     s = env_->NewRandomAccessFile(fname, &file);

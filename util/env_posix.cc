@@ -26,6 +26,7 @@
 #include "util/logging.h"
 #include "util/mutexlock.h"
 #include "util/posix_logger.h"
+#include "leveldb/debug.h"
 
 namespace leveldb {
 
@@ -402,6 +403,7 @@ class PosixEnv : public Env {
 
   virtual Status NewRandomAccessFile(const std::string& fname,
                                      RandomAccessFile** result) {
+	DEBUG_INFO("NewRandomAccessFile", fname);
     *result = NULL;
     Status s;
     int fd = open(fname.c_str(), O_RDONLY);
