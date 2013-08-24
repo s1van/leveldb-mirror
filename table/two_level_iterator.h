@@ -25,9 +25,11 @@ extern Iterator* NewTwoLevelIterator(
     Iterator* (*block_function)(
         void* arg,
         const ReadOptions& options,
-        const Slice& index_value),
+        const Slice& index_value,
+        const bool mirror = false),
     void* arg,
-    const ReadOptions& options);
+    const ReadOptions& options,
+    const bool mirror = false);
 
 }  // namespace leveldb
 

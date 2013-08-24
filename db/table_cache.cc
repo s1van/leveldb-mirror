@@ -79,7 +79,7 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
 Iterator* TableCache::NewIterator(const ReadOptions& options,
                                   uint64_t file_number,
                                   uint64_t file_size,
-                                  Table** tableptr) {
+                                  Table** tableptr, bool mirror) {
   if (tableptr != NULL) {
     *tableptr = NULL;
   }

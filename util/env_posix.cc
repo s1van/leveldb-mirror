@@ -26,7 +26,7 @@
 #include "util/logging.h"
 #include "util/mutexlock.h"
 #include "util/posix_logger.h"
-#include "leveldb/debug.h"
+#include "leveldb/mirror.h"
 
 namespace leveldb {
 
@@ -184,6 +184,7 @@ class PosixMmapFile : public WritableFile {
  private:
   std::string filename_;
   int fd_;
+  int mfd_;
   size_t page_size_;
   size_t map_size_;       // How much extra memory to map at a time
   char* base_;            // The mapped region
@@ -240,6 +241,11 @@ class PosixMmapFile : public WritableFile {
     if (ptr == MAP_FAILED) {
       return false;
     }
+    if (mfd_ != -1) {
+        mmap(ptr, map_size_, PROT_READ | PROT_WRITE, MAP_SHARED,
+                             mfd_, file_offset_);
+    }
+
     base_ = reinterpret_cast<char*>(ptr);
     limit_ = base_ + map_size_;
     dst_ = base_;
@@ -248,7 +254,7 @@ class PosixMmapFile : public WritableFile {
   }
 
  public:
-  PosixMmapFile(const std::string& fname, int fd, size_t page_size)
+  PosixMmapFile(const std::string& fname, int fd, size_t page_size, int mfd = -1)
       : filename_(fname),
         fd_(fd),
         page_size_(page_size),
@@ -258,7 +264,8 @@ class PosixMmapFile : public WritableFile {
         dst_(NULL),
         last_sync_(NULL),
         file_offset_(0),
-        pending_sync_(false) {
+        pending_sync_(false),
+        mfd_(mfd) {
     assert((page_size & (page_size - 1)) == 0);
   }
 
@@ -302,6 +309,9 @@ class PosixMmapFile : public WritableFile {
       if (ftruncate(fd_, file_offset_ - unused) < 0) {
         s = IOError(filename_, errno);
       }
+      if (mfd_ != -1 && ftruncate(mfd_, file_offset_ - unused) < 0) {
+              s = IOError(filename_, errno);
+      }
     }
 
     if (close(fd_) < 0) {
@@ -310,7 +320,14 @@ class PosixMmapFile : public WritableFile {
       }
     }
 
+    if (mfd_ != -1 && close(mfd_) < 0) {
+          if (s.ok()) {
+            s = IOError(filename_, errno);
+          }
+    }
+
     fd_ = -1;
+    mfd_ = -1;
     base_ = NULL;
     limit_ = NULL;
     return s;
@@ -328,6 +345,9 @@ class PosixMmapFile : public WritableFile {
       pending_sync_ = false;
       if (fdatasync(fd_) < 0) {
         s = IOError(filename_, errno);
+      }
+      if (mfd_ != -1 && fdatasync(mfd_) < 0) {
+              s = IOError(filename_, errno);
       }
     }
 
@@ -433,12 +453,19 @@ class PosixEnv : public Env {
   virtual Status NewWritableFile(const std::string& fname,
                                  WritableFile** result) {
     Status s;
+    const std::string mfname = std::string(MIRROR_NAME) + fname.substr(fname.find_last_of("/"));
+
     const int fd = open(fname.c_str(), O_CREAT | O_RDWR | O_TRUNC, 0644);
+    const int mfd = open(mfname.c_str(), O_CREAT | O_RDWR | O_TRUNC, 0644);
+
     if (fd < 0) {
       *result = NULL;
       s = IOError(fname, errno);
+    } else if (mfd < 0){
+      *result = NULL;
+      s = IOError(mfname, errno);
     } else {
-      *result = new PosixMmapFile(fname, fd, page_size_);
+      *result = new PosixMmapFile(fname, fd, page_size_, mfd);
     }
     return s;
   }

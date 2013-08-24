@@ -230,7 +230,7 @@ class VersionSet {
 
   // Create an iterator that reads over the compaction inputs for "*c".
   // The caller should delete the iterator when no longer needed.
-  Iterator* MakeInputIterator(Compaction* c);
+  Iterator* MakeInputIterator(Compaction* c, bool mirror = false);
 
   // Returns true iff some level needs a compaction.
   bool NeedsCompaction() const {
