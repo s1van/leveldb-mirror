@@ -43,7 +43,9 @@ class PosixSequentialFile: public SequentialFile {
 
  public:
   PosixSequentialFile(const std::string& fname, FILE* f)
-      : filename_(fname), file_(f) { }
+      : filename_(fname), file_(f) {
+    DEBUG_INFO("PosixSequentialFile", fname);
+  }
   virtual ~PosixSequentialFile() { fclose(file_); }
 
   virtual Status Read(size_t n, Slice* result, char* scratch) {
@@ -77,7 +79,9 @@ class PosixRandomAccessFile: public RandomAccessFile {
 
  public:
   PosixRandomAccessFile(const std::string& fname, int fd)
-      : filename_(fname), fd_(fd) { }
+      : filename_(fname), fd_(fd) {
+    DEBUG_INFO("PosixRandomAccessFile", fname);
+  }
   virtual ~PosixRandomAccessFile() { close(fd_); }
 
   virtual Status Read(uint64_t offset, size_t n, Slice* result,
@@ -266,6 +270,7 @@ class PosixMmapFile : public WritableFile {
         file_offset_(0),
         pending_sync_(false),
         mfd_(mfd) {
+    DEBUG_INFO("PosixMmapFile", fname);
     assert((page_size & (page_size - 1)) == 0);
   }
 
@@ -454,6 +459,8 @@ class PosixEnv : public Env {
                                  WritableFile** result) {
     Status s;
     const std::string mfname = std::string(MIRROR_NAME) + fname.substr(fname.find_last_of("/"));
+    DEBUG_INFO("NewWritableFile", fname);
+    DEBUG_INFO("NewWritableFile[M]", mfname);
 
     const int fd = open(fname.c_str(), O_CREAT | O_RDWR | O_TRUNC, 0644);
     const int mfd = open(mfname.c_str(), O_CREAT | O_RDWR | O_TRUNC, 0644);
