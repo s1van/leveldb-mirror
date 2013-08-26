@@ -8,6 +8,7 @@
 #include "table/block.h"
 #include "table/format.h"
 #include "table/iterator_wrapper.h"
+#include "leveldb/mirror.h"
 
 namespace leveldb {
 
@@ -181,6 +182,7 @@ Iterator* NewTwoLevelIterator(
     void* arg,
     const ReadOptions& options,
     const bool mirror) {
+  DEBUG_INFO("NewTwoLevelIterator", mirror);
   return new TwoLevelIterator(index_iter, block_function, arg, options, mirror);
 }
 

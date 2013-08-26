@@ -63,7 +63,7 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
     if (mirror)
       std::string fname = TableFileName(MIRROR_NAME, file_number);
 
-    DEBUG_INFO("FindTable", fname);
+    DEBUG_INFO2("FindTable", fname, mirror);
     RandomAccessFile* file = NULL;
     Table* table = NULL;
     s = env_->NewRandomAccessFile(fname, &file);
@@ -93,7 +93,7 @@ Iterator* TableCache::NewIterator(const ReadOptions& options,
                                   uint64_t file_number,
                                   uint64_t file_size,
                                   Table** tableptr, bool mirror) {
-  DEBUG_INFO("TableCache::NewIterator", file_number);
+  DEBUG_INFO2("TableCache::NewIterator", file_number, mirror);
   if (tableptr != NULL) {
     *tableptr = NULL;
   }

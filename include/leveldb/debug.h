@@ -8,6 +8,7 @@
 #ifdef DEBUG_DUMP
 
 #define DEBUG_INFO(_tag, _str)  do{std::cout << "[" << _tag << "]\t" << _str << "\n";} while(0)
+#define DEBUG_INFO2(_tag, _arg1, _arg2)  do{std::cout << "[" << _tag << "]\t" << _arg1 << "\t" << _arg2 << "\n";} while(0)
 
 #define DEBUG_META_VEC(_tag, _vec)	\
 		do{ int _i=0;				\
