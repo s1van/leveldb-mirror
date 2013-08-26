@@ -3,7 +3,7 @@
 
 #include <iostream>
 
-#define DEBUG_DUMP
+//#define DEBUG_DUMP
 
 #ifdef DEBUG_DUMP
 
@@ -22,6 +22,7 @@
 #else
 
 #define DEBUG_INFO(_tag, _str)
+#define DEBUG_INFO2(_tag, _arg1, _arg2)
 #define DEBUG_META_VEC(_tag, _vec)
 
 #endif  //DEBUG_DUMP
