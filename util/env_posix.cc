@@ -498,14 +498,20 @@ class PosixEnv : public Env {
 
   virtual Status DeleteFile(const std::string& fname) {
     Status result;
+    const std::string mfname = std::string(MIRROR_NAME) + fname.substr(fname.find_last_of("/"));
+
     if (unlink(fname.c_str()) != 0) {
       result = IOError(fname, errno);
+    }
+    if (unlink(mfname.c_str()) != 0) {
+          result = IOError(fname, errno);
     }
     return result;
   }
 
   virtual Status CreateDir(const std::string& name) {
     Status result;
+    DEBUG_INFO("CreateDir", name);
     if (mkdir(name.c_str(), 0755) != 0) {
       result = IOError(name, errno);
     }
@@ -514,6 +520,7 @@ class PosixEnv : public Env {
 
   virtual Status DeleteDir(const std::string& name) {
     Status result;
+    DEBUG_INFO("DeleteDir", name);
     if (rmdir(name.c_str()) != 0) {
       result = IOError(name, errno);
     }
@@ -534,6 +541,7 @@ class PosixEnv : public Env {
 
   virtual Status RenameFile(const std::string& src, const std::string& target) {
     Status result;
+    DEBUG_INFO("RenameFile", src + "\t" + target);
     if (rename(src.c_str(), target.c_str()) != 0) {
       result = IOError(src, errno);
     }
