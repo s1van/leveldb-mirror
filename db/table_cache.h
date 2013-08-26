@@ -53,8 +53,9 @@ class TableCache {
   const std::string dbname_;
   const Options* options_;
   Cache* cache_;
+  Cache* mcache_;
 
-  Status FindTable(uint64_t file_number, uint64_t file_size, Cache::Handle**);
+  Status FindTable(uint64_t file_number, uint64_t file_size, Cache::Handle**, bool mirror = false);
 };
 
 }  // namespace leveldb

@@ -7,7 +7,7 @@
 #include "db/filename.h"
 #include "leveldb/env.h"
 #include "leveldb/table.h"
-#include "leveldb/debug.h"
+#include "leveldb/mirror.h"
 #include "util/coding.h"
 
 
@@ -37,22 +37,32 @@ TableCache::TableCache(const std::string& dbname,
     : env_(options->env),
       dbname_(dbname),
       options_(options),
-      cache_(NewLRUCache(entries)) {
+      cache_(NewLRUCache(entries)),
+      mcache_(NewLRUCache(entries)) {
 }
 
 TableCache::~TableCache() {
   delete cache_;
+  delete mcache_;
 }
 
 Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
-                             Cache::Handle** handle) {
+                             Cache::Handle** handle, bool mirror) {
   Status s;
   char buf[sizeof(file_number)];
   EncodeFixed64(buf, file_number);
   Slice key(buf, sizeof(buf));
-  *handle = cache_->Lookup(key);
+
+  if (mirror)
+    *handle = mcache_->Lookup(key);
+  else
+    *handle = cache_->Lookup(key);
+
   if (*handle == NULL) {
     std::string fname = TableFileName(dbname_, file_number);
+    if (mirror)
+      std::string fname = TableFileName(MIRROR_NAME, file_number);
+
     DEBUG_INFO("FindTable", fname);
     RandomAccessFile* file = NULL;
     Table* table = NULL;
@@ -70,7 +80,10 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
       TableAndFile* tf = new TableAndFile;
       tf->file = file;
       tf->table = table;
-      *handle = cache_->Insert(key, tf, 1, &DeleteEntry);
+      if (mirror)
+        *handle = mcache_->Insert(key, tf, 1, &DeleteEntry);
+      else
+        *handle = cache_->Insert(key, tf, 1, &DeleteEntry);
     }
   }
   return s;
@@ -80,19 +93,30 @@ Iterator* TableCache::NewIterator(const ReadOptions& options,
                                   uint64_t file_number,
                                   uint64_t file_size,
                                   Table** tableptr, bool mirror) {
+  DEBUG_INFO("TableCache::NewIterator", file_number);
   if (tableptr != NULL) {
     *tableptr = NULL;
   }
 
   Cache::Handle* handle = NULL;
-  Status s = FindTable(file_number, file_size, &handle);
+  Status s = FindTable(file_number, file_size, &handle, mirror);
   if (!s.ok()) {
     return NewErrorIterator(s);
   }
 
-  Table* table = reinterpret_cast<TableAndFile*>(cache_->Value(handle))->table;
+  Table* table;
+  if (mirror)
+    table = reinterpret_cast<TableAndFile*>(mcache_->Value(handle))->table;
+  else
+    table = reinterpret_cast<TableAndFile*>(cache_->Value(handle))->table;
+
   Iterator* result = table->NewIterator(options);
-  result->RegisterCleanup(&UnrefEntry, cache_, handle);
+
+  if (mirror)
+    result->RegisterCleanup(&UnrefEntry, mcache_, handle);
+  else
+    result->RegisterCleanup(&UnrefEntry, cache_, handle);
+
   if (tableptr != NULL) {
     *tableptr = table;
   }
@@ -119,6 +143,7 @@ void TableCache::Evict(uint64_t file_number) {
   char buf[sizeof(file_number)];
   EncodeFixed64(buf, file_number);
   cache_->Erase(Slice(buf, sizeof(buf)));
+  mcache_->Erase(Slice(buf, sizeof(buf)));
 }
 
 }  // namespace leveldb
