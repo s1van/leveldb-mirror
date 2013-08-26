@@ -13,7 +13,7 @@ namespace leveldb {
 
 namespace {
 
-typedef Iterator* (*BlockFunction)(void*, const ReadOptions&, const Slice&, const bool mirror = false);
+typedef Iterator* (*BlockFunction)(void*, const ReadOptions&, const Slice&, const bool mirror);
 
 class TwoLevelIterator: public Iterator {
  public:
@@ -80,7 +80,7 @@ TwoLevelIterator::TwoLevelIterator(
     BlockFunction block_function,
     void* arg,
     const ReadOptions& options,
-    bool mirror = false)
+    bool mirror)
     : block_function_(block_function),
       arg_(arg),
       options_(options),
@@ -180,7 +180,7 @@ Iterator* NewTwoLevelIterator(
     BlockFunction block_function,
     void* arg,
     const ReadOptions& options,
-    const bool mirror = false) {
+    const bool mirror) {
   return new TwoLevelIterator(index_iter, block_function, arg, options, mirror);
 }
 

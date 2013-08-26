@@ -26,10 +26,10 @@ extern Iterator* NewTwoLevelIterator(
         void* arg,
         const ReadOptions& options,
         const Slice& index_value,
-        const bool mirror = false),
+        const bool mirror),
     void* arg,
     const ReadOptions& options,
-    const bool mirror = false);
+    bool mirror = false);
 
 }  // namespace leveldb
 
