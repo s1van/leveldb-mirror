@@ -3,7 +3,7 @@
 
 #include "leveldb/debug.h"
 
-#define MIRROR_NAME     "/tmp/db_mirror"
+#define MIRROR_NAME     "/data/store/db_mirror"
 
 
 #endif  //MIRROR_LEVEL_H
