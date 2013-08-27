@@ -169,10 +169,14 @@ class Stats {
   double finish_;
   double seconds_;
   int done_;
+  int read_done_;
+  int write_done_;
   int next_report_;
   int64_t bytes_;
   double last_op_finish_;
   Histogram hist_;
+  Histogram read_hist_;
+  Histogram write_hist_;
   std::string message_;
 
  public:
@@ -182,7 +186,11 @@ class Stats {
     next_report_ = 100;
     last_op_finish_ = start_;
     hist_.Clear();
+    read_hist_.Clear();
+    write_hist_.Clear();
     done_ = 0;
+    read_done_ = 0;
+    write_done_ = 0;
     bytes_ = 0;
     seconds_ = 0;
     start_ = Env::Default()->NowMicros();
@@ -192,7 +200,11 @@ class Stats {
 
   void Merge(const Stats& other) {
     hist_.Merge(other.hist_);
+    read_hist_.Merge(other.read_hist_);
+    write_hist_.Merge(other.write_hist_);
     done_ += other.done_;
+    read_done_ += other.read_done_;
+    write_done_ += other.write_done_;
     bytes_ += other.bytes_;
     seconds_ += other.seconds_;
     if (other.start_ < start_) start_ = other.start_;
@@ -209,6 +221,28 @@ class Stats {
 
   void AddMessage(Slice msg) {
     AppendWithSpace(&message_, msg);
+  }
+
+  void FinishedReadOp() {
+    if (FLAGS_histogram) {
+      double now = Env::Default()->NowMicros();
+      double micros = now - last_op_finish_;
+      read_hist_.Add(micros);
+    }
+    read_done_++;
+
+    FinishedSingleOp();
+  }
+
+  void FinishedWriteOp() {
+    if (FLAGS_histogram) {
+      double now = Env::Default()->NowMicros();
+      double micros = now - last_op_finish_;
+      write_hist_.Add(micros);
+    }
+    write_done_++;
+
+    FinishedSingleOp();
   }
 
   void FinishedSingleOp() {
@@ -266,6 +300,10 @@ class Stats {
             extra.c_str());
     if (FLAGS_histogram) {
       fprintf(stdout, "Microseconds per op:\n%s\n", hist_.ToString().c_str());
+      if (read_done_ > 0)
+        fprintf(stdout, "Microseconds per ReadOp:\n%s\n", read_hist_.ToString().c_str());
+      if (write_done_ > 0)
+        fprintf(stdout, "Microseconds per WriteOp:\n%s\n", write_hist_.ToString().c_str());
     }
     fflush(stdout);
   }
