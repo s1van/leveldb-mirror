@@ -849,34 +849,34 @@ class Benchmark {
       char key[100];
       isRead = ((thread->rand.Next() % 100) < FLAGS_read_percent);
       if (isRead) {
-		  const int k = thread->rand.Next() % FLAGS_num;
-		  snprintf(key, sizeof(key), "%016d", k);
-		  if (db_->Get(options, key, &value).ok()) {
-			found++;
-		  }
+        const int k = thread->rand.Next() % FLAGS_num;
+        snprintf(key, sizeof(key), "%016d", k);
+        if (db_->Get(options, key, &value).ok()) {
+              found++;
+        }
+        thread->stats.FinishedReadOp();
       }
       else {
-    	  const int k = FLAGS_num + (thread->rand.Next() % FLAGS_num);
-    	  char key[100];
-    	  snprintf(key, sizeof(key), "%016d", k);
-    	  batch.Put(key, gen.Generate(value_size_));
-    	  bytes += value_size_ + strlen(key);
-    	  bnum ++;
+        const int k = FLAGS_num + (thread->rand.Next() % FLAGS_num);
+        char key[100];
+        snprintf(key, sizeof(key), "%016d", k);
+        batch.Put(key, gen.Generate(value_size_));
+        bytes += value_size_ + strlen(key);
+        bnum ++;
 
-    	  if (bnum == entries_per_batch_) {
-    		  bnum = 0;
-    		  s = db_->Write(write_options_, &batch);
-    		  batch.Clear();
-    		  if (!s.ok()) {
-    			  fprintf(stderr, "put error: %s\n", s.ToString().c_str());
-    			  exit(1);
-    		  }
-    		  thread->stats.AddBytes(bytes);
-    		  bytes = 0;
-    	  }
+        if (bnum == entries_per_batch_) {
+                bnum = 0;
+                s = db_->Write(write_options_, &batch);
+                batch.Clear();
+                if (!s.ok()) {
+                        fprintf(stderr, "put error: %s\n", s.ToString().c_str());
+                        exit(1);
+                }
+                thread->stats.AddBytes(bytes);
+                bytes = 0;
+        }
+    	thread->stats.FinishedWriteOp();
       }
-
-      thread->stats.FinishedSingleOp();
     }
 
     char msg[100];
