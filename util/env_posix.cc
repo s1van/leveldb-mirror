@@ -541,9 +541,15 @@ class PosixEnv : public Env {
 
   virtual Status RenameFile(const std::string& src, const std::string& target) {
     Status result;
+    const std::string msrc = std::string(MIRROR_NAME) + src.substr(src.find_last_of("/"));
+    const std::string mtarget = std::string(MIRROR_NAME) + target.substr(target.find_last_of("/"));
     DEBUG_INFO("RenameFile", src + "\t" + target);
+
     if (rename(src.c_str(), target.c_str()) != 0) {
       result = IOError(src, errno);
+    }
+    if (rename(msrc.c_str(), mtarget.c_str()) != 0) {
+          result = IOError(msrc, errno);
     }
     return result;
   }
