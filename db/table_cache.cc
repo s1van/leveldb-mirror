@@ -59,9 +59,11 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
     *handle = cache_->Lookup(key);
 
   if (*handle == NULL) {
-    std::string fname = TableFileName(dbname_, file_number);
+    std::string fname;
     if (mirror)
-      std::string fname = TableFileName(MIRROR_NAME, file_number);
+      fname = TableFileName(MIRROR_NAME, file_number);
+    else
+      fname = TableFileName(dbname_, file_number);
 
     DEBUG_INFO2("FindTable", fname, mirror);
     RandomAccessFile* file = NULL;
@@ -128,7 +130,8 @@ Status TableCache::Get(const ReadOptions& options,
                        uint64_t file_size,
                        const Slice& k,
                        void* arg,
-                       void (*saver)(void*, const Slice&, const Slice&)) {
+                       void (*saver)(void*, const Slice&, const Slice&), bool mirror) {
+  DEBUG_INFO2("TableCache::Get", file_number, mirror);
   Cache::Handle* handle = NULL;
   Status s = FindTable(file_number, file_size, &handle);
   if (s.ok()) {
