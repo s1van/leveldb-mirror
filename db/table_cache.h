@@ -43,8 +43,7 @@ class TableCache {
              uint64_t file_size,
              const Slice& k,
              void* arg,
-             void (*handle_result)(void*, const Slice&, const Slice&),
-             bool mirror = false);
+             void (*handle_result)(void*, const Slice&, const Slice&));
 
   // Evict any entry for the specified file number
   void Evict(uint64_t file_number);
