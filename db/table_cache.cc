@@ -131,7 +131,7 @@ Status TableCache::Get(const ReadOptions& options,
                        const Slice& k,
                        void* arg,
                        void (*saver)(void*, const Slice&, const Slice&)) {
-  DEBUG_INFO2("TableCache::Get", file_number, mirror);
+  DEBUG_INFO2("TableCache::Get", file_number, file_size);
   Cache::Handle* handle = NULL;
   Status s = FindTable(file_number, file_size, &handle);
   if (s.ok()) {
