@@ -78,6 +78,7 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
 
     if (!s.ok()) {
       assert(table == NULL);
+      DEBUG_INFO2("FindTable<4.1> error result", fname, mirror);
       delete file;
       // We do not cache error results so that if the error is transient,
       // or somebody repairs the file, we recover automatically.
@@ -90,7 +91,7 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
       else
         *handle = cache_->Insert(key, tf, 1, &DeleteEntry);
 
-      DEBUG_INFO2("FindTable<4> Insert to cache", fname, mirror);
+      DEBUG_INFO2("FindTable<4.2> Insert to cache", fname, mirror);
     }
   }
   return s;

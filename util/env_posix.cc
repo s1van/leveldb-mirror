@@ -240,14 +240,21 @@ class PosixMmapFile : public WritableFile {
     if (ftruncate(fd_, file_offset_ + map_size_) < 0) {
       return false;
     }
+    if (ftruncate(mfd_, file_offset_ + map_size_) < 0) {
+      return false;
+    }
+
     void* ptr = mmap(NULL, map_size_, PROT_READ | PROT_WRITE, MAP_SHARED,
                      fd_, file_offset_);
     if (ptr == MAP_FAILED) {
       return false;
     }
     if (mfd_ != -1) {
-        mmap(ptr, map_size_, PROT_READ | PROT_WRITE, MAP_SHARED,
+        ptr = mmap(ptr, map_size_, PROT_READ | PROT_WRITE, MAP_SHARED,
                              mfd_, file_offset_);
+        if (ptr == MAP_FAILED) {
+          return false;
+        }
     }
 
     base_ = reinterpret_cast<char*>(ptr);
@@ -270,7 +277,7 @@ class PosixMmapFile : public WritableFile {
         file_offset_(0),
         pending_sync_(false),
         mfd_(mfd) {
-    DEBUG_INFO("PosixMmapFile", fname);
+    DEBUG_INFO2("PosixMmapFile", fname, mfd);
     assert((page_size & (page_size - 1)) == 0);
   }
 
@@ -305,7 +312,7 @@ class PosixMmapFile : public WritableFile {
   }
 
   virtual Status Close() {
-    Status s;
+    Status s, ms;
     size_t unused = limit_ - dst_;
     if (!UnmapCurrentRegion()) {
       s = IOError(filename_, errno);
@@ -315,7 +322,7 @@ class PosixMmapFile : public WritableFile {
         s = IOError(filename_, errno);
       }
       if (mfd_ != -1 && ftruncate(mfd_, file_offset_ - unused) < 0) {
-              s = IOError(filename_, errno);
+              ms = IOError(filename_ + "[M]", errno);
       }
     }
 
@@ -326,8 +333,8 @@ class PosixMmapFile : public WritableFile {
     }
 
     if (mfd_ != -1 && close(mfd_) < 0) {
-          if (s.ok()) {
-            s = IOError(filename_, errno);
+          if (ms.ok()) {
+            ms = IOError(filename_ + "[M]", errno);
           }
     }
 
@@ -343,7 +350,7 @@ class PosixMmapFile : public WritableFile {
   }
 
   virtual Status Sync() {
-    Status s;
+    Status s, ms;
 
     if (pending_sync_) {
       // Some unmapped data was not synced
@@ -352,7 +359,7 @@ class PosixMmapFile : public WritableFile {
         s = IOError(filename_, errno);
       }
       if (mfd_ != -1 && fdatasync(mfd_) < 0) {
-              s = IOError(filename_, errno);
+        ms = IOError(filename_ + "[M]", errno);
       }
     }
 
@@ -428,7 +435,7 @@ class PosixEnv : public Env {
 
   virtual Status NewRandomAccessFile(const std::string& fname,
                                      RandomAccessFile** result) {
-	DEBUG_INFO("NewRandomAccessFile", fname);
+    DEBUG_INFO("NewRandomAccessFile", fname);
     *result = NULL;
     Status s;
     int fd = open(fname.c_str(), O_RDONLY);
