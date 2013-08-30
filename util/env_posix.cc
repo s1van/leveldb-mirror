@@ -360,16 +360,16 @@ class PosixMmapFile : public WritableFile {
   int fd_;
   int mfd_;
   size_t page_size_;
-  PosixMmapFile_ fp_;
-  PosixMmapFile_ mfp_;
+  PosixMmapFile_ *fp_;
+  PosixMmapFile_ *mfp_;
 
 
   bool UnmapCurrentRegion() {
-    return fp_.UnmapCurrentRegion() && mfp_.UnmapCurrentRegion();
+    return fp_->UnmapCurrentRegion() && mfp_->UnmapCurrentRegion();
   }
 
   bool MapNewRegion() {
-    return fp_.MapNewRegion() && mfp_.MapNewRegion();
+    return fp_->MapNewRegion() && mfp_->MapNewRegion();
   }
 
  public:
@@ -393,18 +393,18 @@ class PosixMmapFile : public WritableFile {
   }
 
   virtual Status Append(const Slice& data) {
-    Status s = fp_.Append(data);
+    Status s = fp_->Append(data);
     if (!s.ok())
       return s;
-    s = mfp_.Append(data);
+    s = mfp_->Append(data);
     return s;
   }
 
   virtual Status Close() {
-    Status s = fp_.Close();
+    Status s = fp_->Close();
     if (!s.ok())
       return s;
-    s = mfp_.Close();
+    s = mfp_->Close();
     return s;
   }
 
@@ -413,10 +413,10 @@ class PosixMmapFile : public WritableFile {
   }
 
   virtual Status Sync() {
-    Status s = fp_.Sync();
+    Status s = fp_->Sync();
     if (!s.ok())
       return s;
-    s = mfp_.Sync();
+    s = mfp_->Sync();
 
     return s;
   }
