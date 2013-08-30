@@ -184,11 +184,10 @@ class PosixMmapReadableFile: public RandomAccessFile {
 // data to the file.  This is safe since we either properly close the
 // file before reading from it, or for log files, the reading code
 // knows enough to skip zero suffixes.
-class PosixMmapFile : public WritableFile {
+class PosixMmapFile_ : public WritableFile {
  private:
   std::string filename_;
   int fd_;
-  int mfd_;
   size_t page_size_;
   size_t map_size_;       // How much extra memory to map at a time
   char* base_;            // The mapped region
@@ -240,23 +239,11 @@ class PosixMmapFile : public WritableFile {
     if (ftruncate(fd_, file_offset_ + map_size_) < 0) {
       return false;
     }
-    if (ftruncate(mfd_, file_offset_ + map_size_) < 0) {
-      return false;
-    }
-
     void* ptr = mmap(NULL, map_size_, PROT_READ | PROT_WRITE, MAP_SHARED,
                      fd_, file_offset_);
     if (ptr == MAP_FAILED) {
       return false;
     }
-    if (mfd_ != -1) {
-        ptr = mmap(ptr, map_size_, PROT_READ | PROT_WRITE, MAP_SHARED,
-                             mfd_, file_offset_);
-        if (ptr == MAP_FAILED) {
-          return false;
-        }
-    }
-
     base_ = reinterpret_cast<char*>(ptr);
     limit_ = base_ + map_size_;
     dst_ = base_;
@@ -265,7 +252,7 @@ class PosixMmapFile : public WritableFile {
   }
 
  public:
-  PosixMmapFile(const std::string& fname, int fd, size_t page_size, int mfd = -1)
+  PosixMmapFile_(const std::string& fname, int fd, size_t page_size)
       : filename_(fname),
         fd_(fd),
         page_size_(page_size),
@@ -275,16 +262,15 @@ class PosixMmapFile : public WritableFile {
         dst_(NULL),
         last_sync_(NULL),
         file_offset_(0),
-        pending_sync_(false),
-        mfd_(mfd) {
-    DEBUG_INFO2("PosixMmapFile", fname, mfd);
+        pending_sync_(false) {
     assert((page_size & (page_size - 1)) == 0);
+    DEBUG_INFO2("PosixMmapFile", fname, fd);
   }
 
 
-  ~PosixMmapFile() {
+  ~PosixMmapFile_() {
     if (fd_ >= 0) {
-      PosixMmapFile::Close();
+      PosixMmapFile_::Close();
     }
   }
 
@@ -312,7 +298,7 @@ class PosixMmapFile : public WritableFile {
   }
 
   virtual Status Close() {
-    Status s, ms;
+    Status s;
     size_t unused = limit_ - dst_;
     if (!UnmapCurrentRegion()) {
       s = IOError(filename_, errno);
@@ -320,9 +306,6 @@ class PosixMmapFile : public WritableFile {
       // Trim the extra space at the end of the file
       if (ftruncate(fd_, file_offset_ - unused) < 0) {
         s = IOError(filename_, errno);
-      }
-      if (mfd_ != -1 && ftruncate(mfd_, file_offset_ - unused) < 0) {
-              ms = IOError(filename_ + "[M]", errno);
       }
     }
 
@@ -332,14 +315,7 @@ class PosixMmapFile : public WritableFile {
       }
     }
 
-    if (mfd_ != -1 && close(mfd_) < 0) {
-          if (ms.ok()) {
-            ms = IOError(filename_ + "[M]", errno);
-          }
-    }
-
     fd_ = -1;
-    mfd_ = -1;
     base_ = NULL;
     limit_ = NULL;
     return s;
@@ -350,16 +326,13 @@ class PosixMmapFile : public WritableFile {
   }
 
   virtual Status Sync() {
-    Status s, ms;
+    Status s;
 
     if (pending_sync_) {
       // Some unmapped data was not synced
       pending_sync_ = false;
       if (fdatasync(fd_) < 0) {
         s = IOError(filename_, errno);
-      }
-      if (mfd_ != -1 && fdatasync(mfd_) < 0) {
-        ms = IOError(filename_ + "[M]", errno);
       }
     }
 
@@ -373,6 +346,75 @@ class PosixMmapFile : public WritableFile {
         s = IOError(filename_, errno);
       }
     }
+
+    return s;
+  }
+};
+
+class PosixMmapFile : public WritableFile {
+ private:
+  std::string filename_;
+  std::string mfilename_;
+  int fd_;
+  int mfd_;
+  size_t page_size_;
+  PosixMmapFile_ fp_;
+  PosixMmapFile_ mfp_;
+
+
+  bool UnmapCurrentRegion() {
+    return fp_.UnmapCurrentRegion() && mfp_.UnmapCurrentRegion();
+  }
+
+  bool MapNewRegion() {
+    return fp_.MapNewRegion() && mfp_.MapNewRegion();
+  }
+
+ public:
+  PosixMmapFile(const std::string& fname, int fd, size_t page_size, bool mfd)
+      : filename_(fname),
+        fd_(fd),
+        mfd_(mfd),
+        page_size_(page_size) {
+    assert((page_size & (page_size - 1)) == 0);
+
+    mfilename_ = std::string(MIRROR_NAME) + fname.substr(fname.find_last_of("/"));
+    fp_ = new PosixMmapFile_(fname, fd, page_size);
+    mfp_ = new PosixMmapFile_(mfilename_, mfd, page_size);
+  }
+
+
+  ~PosixMmapFile() {
+    if (fd_ >= 0) {
+      PosixMmapFile::Close();
+    }
+  }
+
+  virtual Status Append(const Slice& data) {
+    Status s = fp_.Append(data);
+    if (!s.ok())
+      return s;
+    Status s = mfp_.Append(data);
+    return s;
+  }
+
+  virtual Status Close() {
+    Status s = fp_.Close();
+    if (!s.ok())
+      return s;
+    Status s = mfp_.Close();
+    return s;
+  }
+
+  virtual Status Flush() {
+    return Status::OK();
+  }
+
+  virtual Status Sync() {
+    Status s = fp_.Sync();
+    if (!s.ok())
+      return s;
+    Status s = mfp_.Sync();
 
     return s;
   }
