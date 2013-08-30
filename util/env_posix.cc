@@ -381,8 +381,8 @@ class PosixMmapFile : public WritableFile {
     assert((page_size & (page_size - 1)) == 0);
 
     mfilename_ = std::string(MIRROR_NAME) + fname.substr(fname.find_last_of("/"));
-    fp_ = new PosixMmapFile_(fname, fd, page_size);
     mfp_ = new PosixMmapFile_(mfilename_, mfd, page_size);
+    fp_ = new PosixMmapFile_(fname, fd, page_size);
   }
 
 
@@ -393,18 +393,18 @@ class PosixMmapFile : public WritableFile {
   }
 
   virtual Status Append(const Slice& data) {
-    Status s = fp_->Append(data);
+    Status s = mfp_->Append(data);
     if (!s.ok())
       return s;
-    s = mfp_->Append(data);
+    s = fp_->Append(data);
     return s;
   }
 
   virtual Status Close() {
-    Status s = fp_->Close();
+    Status s = mfp_->Close();
     if (!s.ok())
       return s;
-    s = mfp_->Close();
+    s = fp_->Close();
     return s;
   }
 
@@ -413,10 +413,10 @@ class PosixMmapFile : public WritableFile {
   }
 
   virtual Status Sync() {
-    Status s = fp_->Sync();
+    Status s = mfp_->Sync();
     if (!s.ok())
       return s;
-    s = mfp_->Sync();
+    s = fp_->Sync();
 
     return s;
   }
@@ -525,6 +525,7 @@ class PosixEnv : public Env {
     } else {
       *result = new PosixMmapFile(fname, fd, page_size_, mfd);
     }
+    DEBUG_INFO("NewWritableFile[E]", fname);
     return s;
   }
 
@@ -548,6 +549,7 @@ class PosixEnv : public Env {
   }
 
   virtual Status DeleteFile(const std::string& fname) {
+    DEBUG_INFO("DeleteFile", fname);
     Status result;
     const std::string mfname = std::string(MIRROR_NAME) + fname.substr(fname.find_last_of("/"));
 
@@ -555,7 +557,7 @@ class PosixEnv : public Env {
       result = IOError(fname, errno);
     }
     if (unlink(mfname.c_str()) != 0) {
-          result = IOError(fname, errno);
+      result = IOError(fname, errno);
     }
     return result;
   }
