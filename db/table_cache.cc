@@ -53,6 +53,8 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
   EncodeFixed64(buf, file_number);
   Slice key(buf, sizeof(buf));
 
+  DEBUG_INFO2("FindTable<1>", file_number, mirror);
+
   if (mirror)
     *handle = mcache_->Lookup(key);
   else
@@ -65,13 +67,14 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
     else
       fname = TableFileName(dbname_, file_number);
 
-    DEBUG_INFO2("FindTable", fname, mirror);
+    DEBUG_INFO2("FindTable<2>", fname, mirror);
     RandomAccessFile* file = NULL;
     Table* table = NULL;
     s = env_->NewRandomAccessFile(fname, &file);
     if (s.ok()) {
       s = Table::Open(*options_, file, file_size, &table);
     }
+    DEBUG_INFO2("FindTable<3> NewFile", fname, mirror);
 
     if (!s.ok()) {
       assert(table == NULL);
@@ -86,6 +89,8 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
         *handle = mcache_->Insert(key, tf, 1, &DeleteEntry);
       else
         *handle = cache_->Insert(key, tf, 1, &DeleteEntry);
+
+      DEBUG_INFO2("FindTable<4> Insert to cache", fname, mirror);
     }
   }
   return s;
