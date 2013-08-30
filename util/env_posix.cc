@@ -510,11 +510,17 @@ class PosixEnv : public Env {
                                  WritableFile** result) {
     Status s;
     const std::string mfname = std::string(MIRROR_NAME) + fname.substr(fname.find_last_of("/"));
-    DEBUG_INFO("NewWritableFile", fname);
-    DEBUG_INFO("NewWritableFile[M]", mfname);
+    bool mirror = (fname.find("MANIFEST") != std::string::npos) &&
+        (fname.find("CURRENT") != std::string::npos);
+
+    DEBUG_INFO2("NewWritableFile", fname, mirror);
 
     const int fd = open(fname.c_str(), O_CREAT | O_RDWR | O_TRUNC, 0644);
-    const int mfd = open(mfname.c_str(), O_CREAT | O_RDWR | O_TRUNC, 0644);
+    const int mfd;
+    if (mirror)
+      mfd = open(mfname.c_str(), O_CREAT | O_RDWR | O_TRUNC, 0644);
+    else
+      mfd = 1;
 
     if (fd < 0) {
       *result = NULL;
@@ -523,9 +529,13 @@ class PosixEnv : public Env {
       *result = NULL;
       s = IOError(mfname, errno);
     } else {
-      *result = new PosixMmapFile(fname, fd, page_size_, mfd);
+      if (mirror) {
+        *result = new PosixMmapFile(fname, fd, page_size_, mfd);
+      } else {
+        *result = new PosixMmapFile_(fname, fd, page_size_);
+      }
     }
-    DEBUG_INFO("NewWritableFile[E]", fname);
+    DEBUG_INFO2("NewWritableFile[E]", fname, mirror);
     return s;
   }
 
