@@ -210,46 +210,6 @@ class PosixMmapFile_ : public WritableFile {
     return s;
   }
 
-  bool UnmapCurrentRegion() {
-    bool result = true;
-    if (base_ != NULL) {
-      if (last_sync_ < limit_) {
-        // Defer syncing this data until next Sync() call, if any
-        pending_sync_ = true;
-      }
-      if (munmap(base_, limit_ - base_) != 0) {
-        result = false;
-      }
-      file_offset_ += limit_ - base_;
-      base_ = NULL;
-      limit_ = NULL;
-      last_sync_ = NULL;
-      dst_ = NULL;
-
-      // Increase the amount we map the next time, but capped at 1MB
-      if (map_size_ < (1<<20)) {
-        map_size_ *= 2;
-      }
-    }
-    return result;
-  }
-
-  bool MapNewRegion() {
-    assert(base_ == NULL);
-    if (ftruncate(fd_, file_offset_ + map_size_) < 0) {
-      return false;
-    }
-    void* ptr = mmap(NULL, map_size_, PROT_READ | PROT_WRITE, MAP_SHARED,
-                     fd_, file_offset_);
-    if (ptr == MAP_FAILED) {
-      return false;
-    }
-    base_ = reinterpret_cast<char*>(ptr);
-    limit_ = base_ + map_size_;
-    dst_ = base_;
-    last_sync_ = base_;
-    return true;
-  }
 
  public:
   PosixMmapFile_(const std::string& fname, int fd, size_t page_size)
@@ -273,6 +233,48 @@ class PosixMmapFile_ : public WritableFile {
       PosixMmapFile_::Close();
     }
   }
+
+  bool UnmapCurrentRegion() {
+      bool result = true;
+      if (base_ != NULL) {
+        if (last_sync_ < limit_) {
+          // Defer syncing this data until next Sync() call, if any
+          pending_sync_ = true;
+        }
+        if (munmap(base_, limit_ - base_) != 0) {
+          result = false;
+        }
+        file_offset_ += limit_ - base_;
+        base_ = NULL;
+        limit_ = NULL;
+        last_sync_ = NULL;
+        dst_ = NULL;
+
+        // Increase the amount we map the next time, but capped at 1MB
+        if (map_size_ < (1<<20)) {
+          map_size_ *= 2;
+        }
+      }
+      return result;
+    }
+
+    bool MapNewRegion() {
+      assert(base_ == NULL);
+      if (ftruncate(fd_, file_offset_ + map_size_) < 0) {
+        return false;
+      }
+      void* ptr = mmap(NULL, map_size_, PROT_READ | PROT_WRITE, MAP_SHARED,
+                       fd_, file_offset_);
+      if (ptr == MAP_FAILED) {
+        return false;
+      }
+      base_ = reinterpret_cast<char*>(ptr);
+      limit_ = base_ + map_size_;
+      dst_ = base_;
+      last_sync_ = base_;
+      return true;
+    }
+
 
   virtual Status Append(const Slice& data) {
     const char* src = data.data();
@@ -394,7 +396,7 @@ class PosixMmapFile : public WritableFile {
     Status s = fp_.Append(data);
     if (!s.ok())
       return s;
-    Status s = mfp_.Append(data);
+    s = mfp_.Append(data);
     return s;
   }
 
@@ -402,7 +404,7 @@ class PosixMmapFile : public WritableFile {
     Status s = fp_.Close();
     if (!s.ok())
       return s;
-    Status s = mfp_.Close();
+    s = mfp_.Close();
     return s;
   }
 
@@ -414,7 +416,7 @@ class PosixMmapFile : public WritableFile {
     Status s = fp_.Sync();
     if (!s.ok())
       return s;
-    Status s = mfp_.Sync();
+    s = mfp_.Sync();
 
     return s;
   }
