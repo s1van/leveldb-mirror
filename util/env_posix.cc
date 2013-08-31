@@ -235,6 +235,7 @@ class PosixMmapFile_ : public WritableFile {
   }
 
   bool UnmapCurrentRegion() {
+    DEBUG_INFO("PosixMmapFile_::UnmapCurrentRegion", filename_);
       bool result = true;
       if (base_ != NULL) {
         if (last_sync_ < limit_) {
@@ -259,6 +260,7 @@ class PosixMmapFile_ : public WritableFile {
     }
 
     bool MapNewRegion() {
+    DEBUG_INFO("PosixMmapFile_::MapNewRegion", filename_);
       assert(base_ == NULL);
       if (ftruncate(fd_, file_offset_ + map_size_) < 0) {
         return false;
@@ -277,6 +279,7 @@ class PosixMmapFile_ : public WritableFile {
 
 
   virtual Status Append(const Slice& data) {
+    DEBUG_INFO2("PosixMmapFile_::Append", filename_, data.size());
     const char* src = data.data();
     size_t left = data.size();
     while (left > 0) {
@@ -296,6 +299,7 @@ class PosixMmapFile_ : public WritableFile {
       src += n;
       left -= n;
     }
+    DEBUG_INFO2("PosixMmapFile_::Append[E]", filename_, data.size() );
     return Status::OK();
   }
 
@@ -365,6 +369,7 @@ class PosixMmapFile : public WritableFile {
 
 
   bool UnmapCurrentRegion() {
+    DEBUG_INFO2("PosixMmapFile::UnmapCurrentRegion", filename_, mfilename_);
     return fp_->UnmapCurrentRegion() && mfp_->UnmapCurrentRegion();
   }
 
@@ -383,6 +388,7 @@ class PosixMmapFile : public WritableFile {
     mfilename_ = std::string(MIRROR_NAME) + fname.substr(fname.find_last_of("/"));
     mfp_ = new PosixMmapFile_(mfilename_, mfd, page_size);
     fp_ = new PosixMmapFile_(fname, fd, page_size);
+    DEBUG_INFO("PosixMmapFile::NEW", filename_);
   }
 
 
@@ -393,6 +399,7 @@ class PosixMmapFile : public WritableFile {
   }
 
   virtual Status Append(const Slice& data) {
+    DEBUG_INFO("PosixMmapFile::Append", filename_);
     Status s = mfp_->Append(data);
     if (!s.ok())
       return s;
@@ -413,6 +420,7 @@ class PosixMmapFile : public WritableFile {
   }
 
   virtual Status Sync() {
+    DEBUG_INFO("PosixMmapFile::Sync", filename_);
     Status s = mfp_->Sync();
     if (!s.ok())
       return s;
@@ -510,15 +518,14 @@ class PosixEnv : public Env {
                                  WritableFile** result) {
     Status s;
     const std::string mfname = std::string(MIRROR_NAME) + fname.substr(fname.find_last_of("/"));
-    bool mirror = (fname.find("MANIFEST") != std::string::npos) &&
-        (fname.find("CURRENT") != std::string::npos);
+    bool mirror = EXCLUDE_FILES(fname);
 
     DEBUG_INFO2("NewWritableFile", fname, mirror);
 
-    const int fd = open(fname.c_str(), O_CREAT | O_RDWR | O_TRUNC, 0644);
-    const int mfd;
+    const int fd = open(fname.c_str(), O_CREAT | O_RDWR | O_TRUNC, 0777);
+    int mfd;
     if (mirror)
-      mfd = open(mfname.c_str(), O_CREAT | O_RDWR | O_TRUNC, 0644);
+      mfd = open(mfname.c_str(), O_CREAT | O_RDWR | O_TRUNC, 0777);
     else
       mfd = 1;
 
@@ -561,14 +568,16 @@ class PosixEnv : public Env {
   virtual Status DeleteFile(const std::string& fname) {
     DEBUG_INFO("DeleteFile", fname);
     Status result;
+    bool mirror = EXCLUDE_FILES(fname);
     const std::string mfname = std::string(MIRROR_NAME) + fname.substr(fname.find_last_of("/"));
 
     if (unlink(fname.c_str()) != 0) {
       result = IOError(fname, errno);
     }
-    if (unlink(mfname.c_str()) != 0) {
+    if (mirror && unlink(mfname.c_str()) != 0) {
       result = IOError(fname, errno);
     }
+    DEBUG_INFO("DeleteFile[E]", fname);
     return result;
   }
 
@@ -591,6 +600,7 @@ class PosixEnv : public Env {
   }
 
   virtual Status GetFileSize(const std::string& fname, uint64_t* size) {
+    DEBUG_INFO("GetFileSize", fname);
     Status s;
     struct stat sbuf;
     if (stat(fname.c_str(), &sbuf) != 0) {
@@ -604,14 +614,16 @@ class PosixEnv : public Env {
 
   virtual Status RenameFile(const std::string& src, const std::string& target) {
     Status result;
+    bool mirror = EXCLUDE_FILES(src);
+
     const std::string msrc = std::string(MIRROR_NAME) + src.substr(src.find_last_of("/"));
     const std::string mtarget = std::string(MIRROR_NAME) + target.substr(target.find_last_of("/"));
-    DEBUG_INFO("RenameFile", src + "\t" + target);
+    DEBUG_INFO2("RenameFile", src + "\t" + target, mirror);
 
     if (rename(src.c_str(), target.c_str()) != 0) {
       result = IOError(src, errno);
     }
-    if (rename(msrc.c_str(), mtarget.c_str()) != 0) {
+    if (mirror && rename(msrc.c_str(), mtarget.c_str()) != 0) {
           result = IOError(msrc, errno);
     }
     return result;
