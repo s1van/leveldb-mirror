@@ -160,6 +160,7 @@ class PosixMmapReadableFile: public RandomAccessFile {
                         MmapLimiter* limiter)
       : filename_(fname), mmapped_region_(base), length_(length),
         limiter_(limiter) {
+    DEBUG_INFO(fname);
   }
 
   virtual ~PosixMmapReadableFile() {
@@ -279,7 +280,8 @@ class PosixMmapFile_ : public WritableFile {
 
 
   virtual Status Append(const Slice& data) {
-    DEBUG_INFO2(filename_, data.size());
+    //DEBUG_INFO2(filename_, data.size());
+    
     const char* src = data.data();
     size_t left = data.size();
     while (left > 0) {
@@ -299,7 +301,7 @@ class PosixMmapFile_ : public WritableFile {
       src += n;
       left -= n;
     }
-    DEBUG_INFO2(filename_, data.size() );
+    //DEBUG_INFO2(filename_, data.size() );
     return Status::OK();
   }
 
@@ -378,12 +380,13 @@ class PosixMmapFile : public WritableFile {
   }
 
  public:
-  PosixMmapFile(const std::string& fname, int fd, size_t page_size, bool mfd)
+  PosixMmapFile(const std::string& fname, int fd, size_t page_size, int mfd)
       : filename_(fname),
         fd_(fd),
         mfd_(mfd),
         page_size_(page_size) {
     assert((page_size & (page_size - 1)) == 0);
+
 
     mfilename_ = std::string(MIRROR_NAME) + fname.substr(fname.find_last_of("/"));
     mfp_ = new PosixMmapFile_(mfilename_, mfd, page_size);
@@ -399,7 +402,7 @@ class PosixMmapFile : public WritableFile {
   }
 
   virtual Status Append(const Slice& data) {
-    DEBUG_INFO(filename_);
+    //DEBUG_INFO(filename_);
     Status s = mfp_->Append(data);
     if (!s.ok())
       return s;
@@ -689,6 +692,7 @@ class PosixEnv : public Env {
   }
 
   virtual Status NewLogger(const std::string& fname, Logger** result) {
+    DEBUG_INFO(fname);
     FILE* f = fopen(fname.c_str(), "w");
     if (f == NULL) {
       *result = NULL;
