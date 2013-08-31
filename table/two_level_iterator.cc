@@ -182,7 +182,7 @@ Iterator* NewTwoLevelIterator(
     void* arg,
     const ReadOptions& options,
     const bool mirror) {
-  DEBUG_INFO("NewTwoLevelIterator", mirror);
+  DEBUG_INFO(mirror);
   return new TwoLevelIterator(index_iter, block_function, arg, options, mirror);
 }
 

@@ -53,7 +53,7 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
   EncodeFixed64(buf, file_number);
   Slice key(buf, sizeof(buf));
 
-  DEBUG_INFO2("FindTable<1>", file_number, mirror);
+  DEBUG_INFO2(file_number, mirror);
 
   if (mirror)
     *handle = mcache_->Lookup(key);
@@ -67,18 +67,18 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
     else
       fname = TableFileName(dbname_, file_number);
 
-    DEBUG_INFO2("FindTable<2>", fname, mirror);
+    DEBUG_INFO2(fname, mirror);
     RandomAccessFile* file = NULL;
     Table* table = NULL;
     s = env_->NewRandomAccessFile(fname, &file);
     if (s.ok()) {
       s = Table::Open(*options_, file, file_size, &table);
     }
-    DEBUG_INFO2("FindTable<3> NewFile", fname, mirror);
+    DEBUG_INFO2(fname, mirror);
 
     if (!s.ok()) {
       assert(table == NULL);
-      DEBUG_INFO2("FindTable<4.1> error result", fname, mirror);
+      DEBUG_INFO2(fname, mirror);
       delete file;
       // We do not cache error results so that if the error is transient,
       // or somebody repairs the file, we recover automatically.
@@ -91,7 +91,7 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
       else
         *handle = cache_->Insert(key, tf, 1, &DeleteEntry);
 
-      DEBUG_INFO2("FindTable<4.2> Insert to cache", fname, mirror);
+      DEBUG_INFO2(fname, mirror);
     }
   }
   return s;
@@ -101,7 +101,7 @@ Iterator* TableCache::NewIterator(const ReadOptions& options,
                                   uint64_t file_number,
                                   uint64_t file_size,
                                   Table** tableptr, bool mirror) {
-  DEBUG_INFO2("TableCache::NewIterator", file_number, mirror);
+  DEBUG_INFO2(file_number, mirror);
   if (tableptr != NULL) {
     *tableptr = NULL;
   }
@@ -137,7 +137,7 @@ Status TableCache::Get(const ReadOptions& options,
                        const Slice& k,
                        void* arg,
                        void (*saver)(void*, const Slice&, const Slice&)) {
-  DEBUG_INFO2("TableCache::Get", file_number, file_size);
+  DEBUG_INFO2(file_number, file_size);
   Cache::Handle* handle = NULL;
   Status s = FindTable(file_number, file_size, &handle);
   if (s.ok()) {
