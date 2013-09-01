@@ -25,6 +25,7 @@
 #include "leveldb/status.h"
 #include "leveldb/table.h"
 #include "leveldb/table_builder.h"
+#include "leveldb/mirror.h"
 #include "port/port.h"
 #include "table/block.h"
 #include "table/merger.h"
@@ -871,7 +872,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   // Release mutex while we're actually doing the compaction work
   mutex_.Unlock();
 
-  Iterator* input = versions_->MakeInputIterator(compact->compaction, true);
+  Iterator* input = versions_->MakeInputIterator(compact->compaction, MIRROR_ENABLE);
   input->SeekToFirst();
   Status status;
   ParsedInternalKey ikey;

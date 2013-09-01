@@ -12,7 +12,7 @@
 #define PRINT_CURRENT_TIME	do {		\
 		struct timeval now;		\
 		gettimeofday(&now, NULL);	\
-		now.tv_sec = (now.tv_sec << 42) >> 42;		\
+		now.tv_sec = (now.tv_sec << 36) >> 36;		\
 		std::cout << now.tv_sec * 1000000 + now.tv_usec;\
 	} while(0)
 
