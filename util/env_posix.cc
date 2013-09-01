@@ -359,6 +359,12 @@ class PosixMmapFile_ : public WritableFile {
   }
 };
 
+static void * ASync(void * arg) {
+  PosixMmapFile_ *mfp = (PosixMmapFile_*) arg;
+  mfp->Sync();
+  return NULL;
+}
+
 class PosixMmapFile : public WritableFile {
  private:
   std::string filename_;
@@ -424,10 +430,13 @@ class PosixMmapFile : public WritableFile {
 
   virtual Status Sync() {
     DEBUG_INFO(filename_);
-    Status s = mfp_->Sync();
-    if (!s.ok())
-      return s;
-    s = fp_->Sync();
+    pthread_t *pt = (pthread_t *) malloc(sizeof(pthread_t));
+    pthread_create(pt, NULL,  ASync, mfp_);
+    //Status s = mfp_->Sync();
+    //if (!s.ok())
+    //  return s;
+    Status s = fp_->Sync();
+    pthread_join(*pt, NULL);
 
     return s;
   }
