@@ -170,6 +170,7 @@ class PosixMmapReadableFile: public RandomAccessFile {
 
   virtual Status Read(uint64_t offset, size_t n, Slice* result,
                       char* scratch) const {
+    DEBUG_INFO3(filename_, offset, n);
     Status s;
     if (offset + n > length_) {
       *result = Slice();
@@ -177,6 +178,7 @@ class PosixMmapReadableFile: public RandomAccessFile {
     } else {
       *result = Slice(reinterpret_cast<char*>(mmapped_region_) + offset, n);
     }
+    DEBUG_INFO3(filename_, offset, n);
     return s;
   }
 };
@@ -280,7 +282,7 @@ class PosixMmapFile_ : public WritableFile {
 
 
   virtual Status Append(const Slice& data) {
-    //DEBUG_INFO2(filename_, data.size());
+    //if(EXCLUDE_FILE(filename_, ".log")) DEBUG_INFO2(filename_, data.size());
     
     const char* src = data.data();
     size_t left = data.size();
@@ -301,7 +303,8 @@ class PosixMmapFile_ : public WritableFile {
       src += n;
       left -= n;
     }
-    //DEBUG_INFO2(filename_, data.size() );
+
+    //if(EXCLUDE_FILE(filename_, ".log")) DEBUG_INFO2(filename_, data.size());
     return Status::OK();
   }
 
@@ -408,11 +411,12 @@ class PosixMmapFile : public WritableFile {
   }
 
   virtual Status Append(const Slice& data) {
-    //DEBUG_INFO(filename_);
+    //DEBUG_INFO2(filename_, data.size());
     Status s = mfp_->Append(data);
     if (!s.ok())
       return s;
     s = fp_->Append(data);
+    //DEBUG_INFO2(filename_, data.size());
     return s;
   }
 
@@ -429,15 +433,16 @@ class PosixMmapFile : public WritableFile {
   }
 
   virtual Status Sync() {
-    DEBUG_INFO(filename_);
+    DEBUG_INFO2(filename_, mfilename_);
     pthread_t *pt = (pthread_t *) malloc(sizeof(pthread_t));
     pthread_create(pt, NULL,  ASync, mfp_);
     //Status s = mfp_->Sync();
     //if (!s.ok())
     //  return s;
     Status s = fp_->Sync();
-    pthread_join(*pt, NULL);
+    //pthread_join(*pt, NULL);
 
+    DEBUG_INFO2(filename_, mfilename_);
     return s;
   }
 };

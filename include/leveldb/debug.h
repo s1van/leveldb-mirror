@@ -35,6 +35,15 @@
 		std::cout << _arg1 << "\t" << _arg2 << std::endl;\
 	} while(0)
 
+#define DEBUG_INFO3(_arg1, _arg2, _arg3)  do{	\
+		PRINT_CURRENT_TIME;	\
+		std::cout << "\t";	\
+		PRINT_LOC_INFO;		\
+		std::cout << _arg1 << "\t" 	\
+			<< _arg2 << "\t"	\
+			<< _arg3 << std::endl;	\
+	} while(0)
+
 #define DEBUG_META_VEC(_tag, _vec) do{		\
 		PRINT_CURRENT_TIME;		\
 		std::cout << "\t";		\
@@ -51,6 +60,7 @@
 
 #define DEBUG_INFO(_str)
 #define DEBUG_INFO2(_arg1, _arg2)
+#define DEBUG_INFO3(_arg1, _arg2, _arg3)
 #define DEBUG_META_VEC(_tag, _vec)
 
 #endif  //DEBUG_DUMP
