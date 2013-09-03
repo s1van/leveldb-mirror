@@ -25,7 +25,7 @@
 
 //1. Status Append(const Slice& data)
 //2. Status Sync() 
-typedef enum { Append = 1, Sync} mio_op_t;
+typedef enum { MAppend = 1, MSync} mio_op_t;
 
 typedef struct {
 	mio_op_t type;
@@ -54,25 +54,25 @@ typedef struct {
 
 #define OPQ_ADD(q_, op_)	do {	\
 		struct entry_ *e_;	\
-		e_ = malloc(sizeof(struct entry_));		\
+		e_ = (struct entry_ *) malloc(sizeof(struct entry_));	\
 		e_->op = op_;		\
-		pthread_mutex_lock(&(q_->mutex) );			\
+		pthread_mutex_lock(&(q_->mutex) );		\
 		TAILQ_INSERT_TAIL(&(q_->head), e_, entries_);	\
 		pthread_mutex_unlock(&(q_->mutex) );		\
 	} while(0)
 
 #define OPQ_ADD_SYNC(q_, mfp_)	do{	\
 		mio_op op_ = (mio_op)malloc(sizeof(mio_op_s));	\
-		op_->type = Sync;	\
+		op_->type = MSync;	\
 		op_->ptr1 = mfp_;	\
 		OPQ_ADD(q_, op_);	\
 	} while(0)
 
 #define OPQ_ADD_APPEND(q_, mfp_, slice_)do{	\
 		mio_op op_ = (mio_op)malloc(sizeof(mio_op_s));	\
-		op_->type = Append;	\
+		op_->type = MAppend;	\
 		op_->ptr1 = mfp_;	\
-		op_->ptr2 = slice_;	\
+		op_->ptr2 = (void *)slice_;	\
 		OPQ_ADD(q_, op_);	\
 	} while(0)
 

@@ -170,7 +170,7 @@ class PosixMmapReadableFile: public RandomAccessFile {
 
   virtual Status Read(uint64_t offset, size_t n, Slice* result,
                       char* scratch) const {
-    DEBUG_INFO3(filename_, offset, n);
+    //DEBUG_INFO3(filename_, offset, n);
     Status s;
     if (offset + n > length_) {
       *result = Slice();
@@ -178,7 +178,7 @@ class PosixMmapReadableFile: public RandomAccessFile {
     } else {
       *result = Slice(reinterpret_cast<char*>(mmapped_region_) + offset, n);
     }
-    DEBUG_INFO3(filename_, offset, n);
+    //DEBUG_INFO3(filename_, offset, n);
     return s;
   }
 };
@@ -374,9 +374,9 @@ static void * mirrorCompactionHelper(void * arg) {
 			OPQ_POP(mio_queue, op);			//get operation
 			mfp = (PosixMmapFile_*) op->ptr1;	//get handler
 
-			if (op->type == Sync) {
+			if (op->type == MSync) {
 				mfp->Sync();
-			} else if (op->type == Append) {
+			} else if (op->type == MAppend) {
 				mfp->Append((const Slice&) op->ptr2);
 			}
 
@@ -390,6 +390,7 @@ static void * mirrorCompactionHelper(void * arg) {
 }
 
 static pthread_t *mirror_helper = NULL; 
+static opq mio_queue = NULL;
 
 class PosixMmapFile : public WritableFile {
  private:
@@ -427,7 +428,7 @@ class PosixMmapFile : public WritableFile {
 
     if (mirror_helper == NULL) {
         mirror_helper = (pthread_t *) malloc(sizeof(pthread_t));
-	opq mio_queue = OPQ_MALLOC;
+	mio_queue = OPQ_MALLOC;
 	OPQ_INIT(mio_queue);
         pthread_create(mirror_helper, NULL,  mirrorCompactionHelper, mio_queue);
 
@@ -446,6 +447,7 @@ class PosixMmapFile : public WritableFile {
     Status s = mfp_->Append(data);
     if (!s.ok())
       return s;
+    //OPQ_ADD_APPEND(mio_queue, mfp_, &data);
     s = fp_->Append(data);
     //DEBUG_INFO2(filename_, data.size());
     return s;
@@ -468,6 +470,7 @@ class PosixMmapFile : public WritableFile {
     //Status s = mfp_->Sync();
     //if (!s.ok())
     //  return s;
+    //OPQ_ADD_SYNC(mio_queue, mfp_);
     Status s = fp_->Sync();
     //pthread_join(*pt, NULL);
 
