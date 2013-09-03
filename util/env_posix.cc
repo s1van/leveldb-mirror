@@ -362,11 +362,34 @@ class PosixMmapFile_ : public WritableFile {
   }
 };
 
-static void * ASync(void * arg) {
-  PosixMmapFile_ *mfp = (PosixMmapFile_*) arg;
-  mfp->Sync();
+static void * mirrorCompactionHelper(void * arg) {
+	opq mio_queue = (opq) arg;
+	mio_op op;
+  	PosixMmapFile_ *mfp;
+	struct timespec wtime = {0, 256};
+
+	while(1) {
+		if (OPQ_NONEMPTY(mio_queue)) {
+
+			OPQ_POP(mio_queue, op);			//get operation
+			mfp = (PosixMmapFile_*) op->ptr1;	//get handler
+
+			if (op->type == Sync) {
+				mfp->Sync();
+			} else if (op->type == Append) {
+				mfp->Append((const Slice&) op->ptr2);
+			}
+
+			free(op);
+			continue;
+		}
+		//nanosleep(&wtime, NULL);
+	}
+
   return NULL;
 }
+
+static pthread_t *mirror_helper = NULL; 
 
 class PosixMmapFile : public WritableFile {
  private:
@@ -401,6 +424,14 @@ class PosixMmapFile : public WritableFile {
     mfp_ = new PosixMmapFile_(mfilename_, mfd, page_size);
     fp_ = new PosixMmapFile_(fname, fd, page_size);
     DEBUG_INFO(filename_);
+
+    if (mirror_helper == NULL) {
+        mirror_helper = (pthread_t *) malloc(sizeof(pthread_t));
+	opq mio_queue = OPQ_MALLOC;
+	OPQ_INIT(mio_queue);
+        pthread_create(mirror_helper, NULL,  mirrorCompactionHelper, mio_queue);
+
+    }
   }
 
 
@@ -434,8 +465,6 @@ class PosixMmapFile : public WritableFile {
 
   virtual Status Sync() {
     DEBUG_INFO2(filename_, mfilename_);
-    pthread_t *pt = (pthread_t *) malloc(sizeof(pthread_t));
-    pthread_create(pt, NULL,  ASync, mfp_);
     //Status s = mfp_->Sync();
     //if (!s.ok())
     //  return s;
