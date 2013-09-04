@@ -35,6 +35,7 @@
 //      seekrandom    -- N random seeks
 //      crc32c        -- repeated crc32c of 4K of data
 //      acquireload   -- load N*1000 times
+//		rwrandom	  -- read and write N times in random order
 //   Meta operations:
 //      compact     -- Compact the entire DB
 //      stats       -- Print DB stats
@@ -58,6 +59,7 @@ static const char* FLAGS_benchmarks =
     "snappycomp,"
     "snappyuncomp,"
     "acquireload,"
+	"rwrandom,"
     ;
 
 // Number of key/values to place in database
@@ -101,6 +103,9 @@ static bool FLAGS_use_existing_db = false;
 
 // Use the db with the following name.
 static const char* FLAGS_db = NULL;
+
+//Percent of read requests in r/w benchmark
+static int FLAGS_read_percent = 100;
 
 namespace leveldb {
 
@@ -164,10 +169,14 @@ class Stats {
   double finish_;
   double seconds_;
   int done_;
+  int read_done_;
+  int write_done_;
   int next_report_;
   int64_t bytes_;
   double last_op_finish_;
   Histogram hist_;
+  Histogram read_hist_;
+  Histogram write_hist_;
   std::string message_;
 
  public:
@@ -177,7 +186,11 @@ class Stats {
     next_report_ = 100;
     last_op_finish_ = start_;
     hist_.Clear();
+    read_hist_.Clear();
+    write_hist_.Clear();
     done_ = 0;
+    read_done_ = 0;
+    write_done_ = 0;
     bytes_ = 0;
     seconds_ = 0;
     start_ = Env::Default()->NowMicros();
@@ -187,7 +200,11 @@ class Stats {
 
   void Merge(const Stats& other) {
     hist_.Merge(other.hist_);
+    read_hist_.Merge(other.read_hist_);
+    write_hist_.Merge(other.write_hist_);
     done_ += other.done_;
+    read_done_ += other.read_done_;
+    write_done_ += other.write_done_;
     bytes_ += other.bytes_;
     seconds_ += other.seconds_;
     if (other.start_ < start_) start_ = other.start_;
@@ -204,6 +221,28 @@ class Stats {
 
   void AddMessage(Slice msg) {
     AppendWithSpace(&message_, msg);
+  }
+
+  void FinishedReadOp() {
+    if (FLAGS_histogram) {
+      double now = Env::Default()->NowMicros();
+      double micros = now - last_op_finish_;
+      read_hist_.Add(micros);
+    }
+    read_done_++;
+
+    FinishedSingleOp();
+  }
+
+  void FinishedWriteOp() {
+    if (FLAGS_histogram) {
+      double now = Env::Default()->NowMicros();
+      double micros = now - last_op_finish_;
+      write_hist_.Add(micros);
+    }
+    write_done_++;
+
+    FinishedSingleOp();
   }
 
   void FinishedSingleOp() {
@@ -242,10 +281,10 @@ class Stats {
     if (done_ < 1) done_ = 1;
 
     std::string extra;
+    double elapsed = (finish_ - start_) * 1e-6;
     if (bytes_ > 0) {
       // Rate is computed on actual elapsed time, not the sum of per-thread
       // elapsed times.
-      double elapsed = (finish_ - start_) * 1e-6;
       char rate[100];
       snprintf(rate, sizeof(rate), "%6.1f MB/s",
                (bytes_ / 1048576.0) / elapsed);
@@ -253,13 +292,18 @@ class Stats {
     }
     AppendWithSpace(&extra, message_);
 
-    fprintf(stdout, "%-12s : %11.3f micros/op;%s%s\n",
+    fprintf(stdout, "%-12s : %11.3f micros/op;\t%11.3f ops/s%s%s\n",
             name.ToString().c_str(),
             seconds_ * 1e6 / done_,
+            done_ / elapsed,
             (extra.empty() ? "" : " "),
             extra.c_str());
     if (FLAGS_histogram) {
       fprintf(stdout, "Microseconds per op:\n%s\n", hist_.ToString().c_str());
+      if (read_done_ > 0)
+        fprintf(stdout, "Microseconds per ReadOp:\n%s\n", read_hist_.ToString().c_str());
+      if (write_done_ > 0)
+        fprintf(stdout, "Microseconds per WriteOp:\n%s\n", write_hist_.ToString().c_str());
     }
     fflush(stdout);
   }
@@ -503,6 +547,8 @@ class Benchmark {
         PrintStats("leveldb.stats");
       } else if (name == Slice("sstables")) {
         PrintStats("leveldb.sstables");
+      } else if (name == Slice("rwrandom")) {
+        method = &Benchmark::RWRandom;
       } else {
         if (name != Slice()) {  // No error message for empty name
           fprintf(stderr, "unknown benchmark '%s'\n", name.ToString().c_str());
@@ -784,6 +830,67 @@ class Benchmark {
     thread->stats.AddMessage(msg);
   }
 
+
+  void RWRandom(ThreadState* thread) {
+    ReadOptions options;
+    std::string value;
+
+    RandomGenerator gen;
+    WriteBatch batch;
+    Status s;
+    int64_t bytes = 0;
+    bool isRead;
+
+    int found = 0;
+    int bnum = 0;
+    batch.Clear();
+
+    for (int i = 0; i < num_; i++) {
+      char key[100];
+      isRead = ((thread->rand.Next() % 100) < FLAGS_read_percent);
+      if (isRead) {
+        const int k = thread->rand.Next() % FLAGS_num;
+        snprintf(key, sizeof(key), "%016d", k);
+        if (db_->Get(options, key, &value).ok()) {
+              found++;
+        }
+        thread->stats.FinishedReadOp();
+      }
+      else {
+        const int k = FLAGS_num + (thread->rand.Next() % FLAGS_num);
+        char key[100];
+        snprintf(key, sizeof(key), "%016d", k);
+        batch.Put(key, gen.Generate(value_size_));
+        bytes += value_size_ + strlen(key);
+        bnum ++;
+
+        if (bnum == entries_per_batch_) {
+                bnum = 0;
+                s = db_->Write(write_options_, &batch);
+                batch.Clear();
+                if (!s.ok()) {
+                        fprintf(stderr, "put error: %s\n", s.ToString().c_str());
+                        exit(1);
+                }
+                thread->stats.AddBytes(bytes);
+                bytes = 0;
+        }
+    	thread->stats.FinishedWriteOp();
+      }
+    }
+
+    char msg[100];
+    snprintf(msg, sizeof(msg), "(%d of %d found)", found, num_);
+    thread->stats.AddMessage(msg);
+
+    if (num_ != FLAGS_num) {
+      char msg[100];
+      snprintf(msg, sizeof(msg), "(%d ops)", num_);
+      thread->stats.AddMessage(msg);
+    }
+
+  }
+
   void ReadMissing(ThreadState* thread) {
     ReadOptions options;
     std::string value;
@@ -960,6 +1067,8 @@ int main(int argc, char** argv) {
       FLAGS_open_files = n;
     } else if (strncmp(argv[i], "--db=", 5) == 0) {
       FLAGS_db = argv[i] + 5;
+    } else if (sscanf(argv[i], "--read_percent=%d%c", &n, &junk) == 1) {
+      FLAGS_read_percent = n;
     } else {
       fprintf(stderr, "Invalid flag '%s'\n", argv[i]);
       exit(1);
