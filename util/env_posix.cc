@@ -470,7 +470,7 @@ class PosixMmapFile : public WritableFile {
     //Status s = mfp_->Sync();
     //if (!s.ok())
     //  return s;
-    //OPQ_ADD_SYNC(mio_queue, mfp_);
+    OPQ_ADD_SYNC(mio_queue, mfp_);
     Status s = fp_->Sync();
     //pthread_join(*pt, NULL);
 

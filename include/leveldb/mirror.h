@@ -6,7 +6,7 @@
 #include <sys/queue.h>
 #include <time.h>
 
-#define MIRROR_NAME     "/data/store/db_mirror"
+#define MIRROR_NAME     "/mnt/raid/store/mirror"
 #define MIRROR_ENABLE	true
 
 
