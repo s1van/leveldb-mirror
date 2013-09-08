@@ -15,7 +15,8 @@
 #if MIRROR_ENABLE
 	#define EXCLUDE_FILES(fname_)	EXCLUDE_FILE(fname_, "MANIFEST")		\
 		&& EXCLUDE_FILE(fname_, "CURRENT") && EXCLUDE_FILE(fname_, ".dbtmp") 	\
-		&& EXCLUDE_FILE(fname_, "LOG") && EXCLUDE_FILE(fname_, ".log")
+		&& EXCLUDE_FILE(fname_, "LOG") && EXCLUDE_FILE(fname_, ".log")		\
+		&& EXCLUDE_FILE(fname_, "LOCK")
 #else
 	#define EXCLUDE_FILES(fname_)	0
 #endif	//MIRROR_ENABLE
