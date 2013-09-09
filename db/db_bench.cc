@@ -1088,11 +1088,11 @@ int main(int argc, char** argv) {
       FLAGS_db = argv[i] + 5;
     } else if (sscanf(argv[i], "--read_percent=%d%c", &n, &junk) == 1) {
       FLAGS_read_percent = n;
-    } else if (sscanf(argv[i], "--read_range=[%d,%d]%c", &n, &m, &junk) == 1) {
+    } else if (sscanf(argv[i], "--read_range=[%d','%d]%c", &n, &m, &junk) == 1) {
       FLAGS_read_from = n;
       FLAGS_read_upto = m;
       FLAGS_read_span = m - n;
-    } else if (sscanf(argv[i], "--write_range=[%d,%d]%c", &n, &m, &junk) == 1) {
+    } else if (sscanf(argv[i], "--write_range=[%d','%d]%c", &n, &m, &junk) == 1) {
       FLAGS_write_from = n;
       FLAGS_write_upto = m;
       FLAGS_write_span = m - n;
