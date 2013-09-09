@@ -626,6 +626,8 @@ class Benchmark {
       arg[i].thread = new ThreadState(i);
       arg[i].thread->shared = &shared;
       Env::Default()->StartThread(ThreadBody, &arg[i]);
+      if (method == &Benchmark::RWRandom)
+         method = &Benchmark::ReadRandom;
     }
 
     shared.mu.Lock();
