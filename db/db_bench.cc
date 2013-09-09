@@ -107,6 +107,15 @@ static const char* FLAGS_db = NULL;
 //Percent of read requests in r/w benchmark
 static int FLAGS_read_percent = 100;
 
+//key range of requests in r/w benchmark
+static int FLAGS_write_from = 0;
+static int FLAGS_write_upto = -1;
+static int FLAGS_write_span = -1;
+
+static int FLAGS_read_from = 0;
+static int FLAGS_read_upto = -1;
+static int FLAGS_read_span = -1;
+
 namespace leveldb {
 
 namespace {
@@ -820,7 +829,7 @@ class Benchmark {
     int found = 0;
     for (int i = 0; i < reads_; i++) {
       char key[100];
-      const int k = thread->rand.Next() % FLAGS_num;
+      const int k = FLAGS_read_from + thread->rand.Next() % FLAGS_read_span;
       snprintf(key, sizeof(key), "%016d", k);
       if (db_->Get(options, key, &value).ok()) {
         found++;
@@ -851,7 +860,7 @@ class Benchmark {
       char key[100];
       isRead = ((thread->rand.Next() % 100) < FLAGS_read_percent);
       if (isRead) {
-        const int k = thread->rand.Next() % FLAGS_num;
+        const int k = thread->rand.Next() % FLAGS_read_span;
         snprintf(key, sizeof(key), "%016d", k);
         if (db_->Get(options, key, &value).ok()) {
               found++;
@@ -859,7 +868,7 @@ class Benchmark {
         thread->stats.FinishedReadOp();
       }
       else {
-        const int k = FLAGS_num + (thread->rand.Next() % FLAGS_num);
+        const int k = FLAGS_write_from + (thread->rand.Next() % FLAGS_write_span);
         char key[100];
         snprintf(key, sizeof(key), "%016d", k);
         batch.Put(key, gen.Generate(value_size_));
@@ -1039,7 +1048,7 @@ int main(int argc, char** argv) {
 
   for (int i = 1; i < argc; i++) {
     double d;
-    int n;
+    int n, m;
     char junk;
     if (leveldb::Slice(argv[i]).starts_with("--benchmarks=")) {
       FLAGS_benchmarks = argv[i] + strlen("--benchmarks=");
@@ -1053,6 +1062,14 @@ int main(int argc, char** argv) {
       FLAGS_use_existing_db = n;
     } else if (sscanf(argv[i], "--num=%d%c", &n, &junk) == 1) {
       FLAGS_num = n;
+      if (FLAGS_read_span == -1) {
+        FLAGS_read_upto = FLAGS_num;
+        FLAGS_read_span = FLAGS_num;
+      }
+      if (FLAGS_write_span == -1) {
+        FLAGS_write_upto = FLAGS_num;
+        FLAGS_write_span = FLAGS_num;
+      }
     } else if (sscanf(argv[i], "--reads=%d%c", &n, &junk) == 1) {
       FLAGS_reads = n;
     } else if (sscanf(argv[i], "--threads=%d%c", &n, &junk) == 1) {
@@ -1071,6 +1088,14 @@ int main(int argc, char** argv) {
       FLAGS_db = argv[i] + 5;
     } else if (sscanf(argv[i], "--read_percent=%d%c", &n, &junk) == 1) {
       FLAGS_read_percent = n;
+    } else if (sscanf(argv[i], "--read_range=[%d,%d]%c", &n, &m, &junk) == 1) {
+      FLAGS_read_from = n;
+      FLAGS_read_upto = m;
+      FLAGS_read_span = m - n;
+    } else if (sscanf(argv[i], "--write_range=[%d,%d]%c", &n, &m, &junk) == 1) {
+      FLAGS_write_from = n;
+      FLAGS_write_upto = m;
+      FLAGS_write_span = m - n;
     } else {
       fprintf(stderr, "Invalid flag '%s'\n", argv[i]);
       exit(1);
