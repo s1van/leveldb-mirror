@@ -41,6 +41,10 @@ using leveldb::WritableFile;
 using leveldb::WriteBatch;
 using leveldb::WriteOptions;
 
+/****** declared in mirror.h ******/
+int MIRROR_ENABLE = 0;
+char *MIRROR_PATH = NULL;
+
 extern "C" {
 
 struct leveldb_t              { DB*               rep; };

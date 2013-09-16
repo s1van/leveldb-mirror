@@ -6,20 +6,17 @@
 #include <sys/queue.h>
 #include <time.h>
 
-#define MIRROR_NAME     "/mnt/raid/store/mirror"
-#define MIRROR_ENABLE	true
-
+//#define MIRROR_PATH     "/mnt/raid/store/mirror"
+//#define MIRROR_ENABLE	true
+extern int MIRROR_ENABLE;
+extern char *MIRROR_PATH;
 
 #define EXCLUDE_FILE(fname_, str_)	((fname_.find(str_) == std::string::npos))
 
-#if MIRROR_ENABLE
-	#define EXCLUDE_FILES(fname_)	EXCLUDE_FILE(fname_, "MANIFEST")		\
-		&& EXCLUDE_FILE(fname_, "CURRENT") && EXCLUDE_FILE(fname_, ".dbtmp") 	\
-		&& EXCLUDE_FILE(fname_, "LOG") && EXCLUDE_FILE(fname_, ".log")		\
-		&& EXCLUDE_FILE(fname_, "LOCK")
-#else
-	#define EXCLUDE_FILES(fname_)	0
-#endif	//MIRROR_ENABLE
+#define EXCLUDE_FILES(fname_)	((MIRROR_ENABLE ? 	\
+	EXCLUDE_FILE(fname_, "MANIFEST") && EXCLUDE_FILE(fname_, "CURRENT") 	\
+	&& EXCLUDE_FILE(fname_, ".dbtmp") && EXCLUDE_FILE(fname_, "LOG") 	\
+	&& EXCLUDE_FILE(fname_, ".log")	&& EXCLUDE_FILE(fname_, "LOCK") : 0 ))
 
 
 /************************** Asynchorous Mirror I/O *****************************/

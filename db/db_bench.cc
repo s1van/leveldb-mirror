@@ -10,6 +10,7 @@
 #include "leveldb/cache.h"
 #include "leveldb/db.h"
 #include "leveldb/env.h"
+#include "leveldb/mirror.h"
 #include "leveldb/write_batch.h"
 #include "port/port.h"
 #include "util/crc32c.h"
@@ -496,7 +497,7 @@ class Benchmark {
       int num_threads = FLAGS_threads;
 
       if (name == Slice("fillseq")) {
-        fresh_db = true;
+        fresh_db = false;
         method = &Benchmark::WriteSeq;
       } else if (name == Slice("fillbatch")) {
         fresh_db = true;
@@ -635,8 +636,8 @@ class Benchmark {
       arg[i].thread = new ThreadState(i);
       arg[i].thread->shared = &shared;
       Env::Default()->StartThread(ThreadBody, &arg[i]);
-      if (method == &Benchmark::RWRandom)
-         method = &Benchmark::ReadRandom;
+      //if (method == &Benchmark::RWRandom)
+         //method = &Benchmark::ReadRandom;
     }
 
     shared.mu.Lock();
@@ -827,7 +828,8 @@ class Benchmark {
     ReadOptions options;
     std::string value;
     int found = 0;
-    for (int i = 0; i < reads_; i++) {
+    int i = 0;
+    for (i = 0; i < FLAGS_reads; i++) {
       char key[100];
       const int k = FLAGS_read_from + thread->rand.Next() % FLAGS_read_span;
       snprintf(key, sizeof(key), "%016d", k);
@@ -839,6 +841,7 @@ class Benchmark {
     char msg[100];
     snprintf(msg, sizeof(msg), "(%d of %d found)", found, num_);
     thread->stats.AddMessage(msg);
+    fprintf(stderr, "readrandom completes %d ops\n", i);
   }
 
 
@@ -856,7 +859,8 @@ class Benchmark {
     int bnum = 0;
     batch.Clear();
 
-    for (int i = 0; i < num_; i++) {
+    int i = 0;
+    for (i = 0; i < num_; i++) {
       char key[100];
       isRead = ((thread->rand.Next() % 100) < FLAGS_read_percent);
       if (isRead) {
@@ -899,6 +903,8 @@ class Benchmark {
       snprintf(msg, sizeof(msg), "(%d ops)", num_);
       thread->stats.AddMessage(msg);
     }
+
+    fprintf(stderr, "rwrandom completes %d ops\n", i);
 
   }
 
@@ -1048,7 +1054,7 @@ int main(int argc, char** argv) {
 
   for (int i = 1; i < argc; i++) {
     double d;
-    int n, m;
+    int n;
     char junk;
     if (leveldb::Slice(argv[i]).starts_with("--benchmarks=")) {
       FLAGS_benchmarks = argv[i] + strlen("--benchmarks=");
@@ -1088,19 +1094,28 @@ int main(int argc, char** argv) {
       FLAGS_db = argv[i] + 5;
     } else if (sscanf(argv[i], "--read_percent=%d%c", &n, &junk) == 1) {
       FLAGS_read_percent = n;
-    } else if (sscanf(argv[i], "--read_range=[%d','%d]%c", &n, &m, &junk) == 1) {
+    } else if (sscanf(argv[i], "--read_key_from=%d%c", &n, &junk) == 1) {
       FLAGS_read_from = n;
-      FLAGS_read_upto = m;
-      FLAGS_read_span = m - n;
-    } else if (sscanf(argv[i], "--write_range=[%d','%d]%c", &n, &m, &junk) == 1) {
+    } else if (sscanf(argv[i], "--read_key_upto=%d%c", &n, &junk) == 1) {
+      FLAGS_read_upto = n;
+    } else if (sscanf(argv[i], "--write_key_from=%d%c", &n, &junk) == 1) {
       FLAGS_write_from = n;
-      FLAGS_write_upto = m;
-      FLAGS_write_span = m - n;
+    } else if (sscanf(argv[i], "--write_key_upto=%d%c", &n, &junk) == 1) {
+      FLAGS_write_upto = n;
+    } else if (sscanf(argv[i], "--mirror=%d%c", &n, &junk) == 1) {
+      MIRROR_ENABLE = n;
+    } else if (strncmp(argv[i], "--mirror_path=", 14) == 0) {
+      MIRROR_PATH = argv[i] + 14;
     } else {
       fprintf(stderr, "Invalid flag '%s'\n", argv[i]);
       exit(1);
     }
   }
+  FLAGS_read_span = FLAGS_read_upto - FLAGS_read_from;
+  FLAGS_write_span = FLAGS_write_upto - FLAGS_write_from;
+  fprintf(stderr, "Range: %d %d\n", FLAGS_write_span, FLAGS_read_span);
+
+
 
   // Choose a location for the test database if none given with --db=<path>
   if (FLAGS_db == NULL) {

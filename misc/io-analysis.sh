@@ -60,4 +60,6 @@ sleep 1;
 
 for dev in $DEVICES; do
 	cd $OPATH && seekwatcher -t $dev -o ${dev}.png --dpi=$DPI;
+	cd $OPATH && seekwatcher -R -t $dev -o ${dev}_R.png --dpi=$DPI;
+	cd $OPATH && seekwatcher -W -t $dev -o ${dev}_W.png --dpi=$DPI;
 done

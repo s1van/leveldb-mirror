@@ -389,7 +389,7 @@ static void * mirrorCompactionHelper(void * arg) {
   return NULL;
 }
 
-static pthread_t *mirror_helper = NULL; 
+static pthread_t *mirror_helper = (pthread_t *)1; //NULL; 
 static opq mio_queue = NULL;
 
 class PosixMmapFile : public WritableFile {
@@ -421,7 +421,7 @@ class PosixMmapFile : public WritableFile {
     assert((page_size & (page_size - 1)) == 0);
 
 
-    mfilename_ = std::string(MIRROR_NAME) + fname.substr(fname.find_last_of("/"));
+    mfilename_ = std::string(MIRROR_PATH) + fname.substr(fname.find_last_of("/"));
     mfp_ = new PosixMmapFile_(mfilename_, mfd, page_size);
     fp_ = new PosixMmapFile_(fname, fd, page_size);
     DEBUG_INFO(filename_);
@@ -470,7 +470,7 @@ class PosixMmapFile : public WritableFile {
     //Status s = mfp_->Sync();
     //if (!s.ok())
     //  return s;
-    OPQ_ADD_SYNC(mio_queue, mfp_);
+    //OPQ_ADD_SYNC(mio_queue, mfp_);
     Status s = fp_->Sync();
     //pthread_join(*pt, NULL);
 
@@ -566,7 +566,7 @@ class PosixEnv : public Env {
   virtual Status NewWritableFile(const std::string& fname,
                                  WritableFile** result) {
     Status s;
-    const std::string mfname = std::string(MIRROR_NAME) + fname.substr(fname.find_last_of("/"));
+    const std::string mfname = std::string(MIRROR_PATH) + fname.substr(fname.find_last_of("/"));
     bool mirror = EXCLUDE_FILES(fname);
 
     DEBUG_INFO2(fname, mirror);
@@ -619,7 +619,7 @@ class PosixEnv : public Env {
     DEBUG_INFO(fname);
     Status result;
     bool mirror = EXCLUDE_FILES(fname);
-    const std::string mfname = std::string(MIRROR_NAME) + fname.substr(fname.find_last_of("/"));
+    const std::string mfname = std::string(MIRROR_PATH) + fname.substr(fname.find_last_of("/"));
 
     if (unlink(fname.c_str()) != 0) {
       result = IOError(fname, errno);
@@ -666,8 +666,8 @@ class PosixEnv : public Env {
     Status result;
     bool mirror = EXCLUDE_FILES(src);
 
-    const std::string msrc = std::string(MIRROR_NAME) + src.substr(src.find_last_of("/"));
-    const std::string mtarget = std::string(MIRROR_NAME) + target.substr(target.find_last_of("/"));
+    const std::string msrc = std::string(MIRROR_PATH) + src.substr(src.find_last_of("/"));
+    const std::string mtarget = std::string(MIRROR_PATH) + target.substr(target.find_last_of("/"));
     DEBUG_INFO2(src + "\t" + target, mirror);
 
     if (rename(src.c_str(), target.c_str()) != 0) {

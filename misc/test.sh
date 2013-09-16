@@ -3,30 +3,52 @@
 ANALYZER=`dirname $0`/io-analysis.sh;
 
 CONF=$1;
-OPATH=$2;
-EXEC=$3;
-STORE=$4;
-DEVS=$5;
+#OPATH=$2;
+#DEVS=$3;
 
 USE_DB=0;
 THREADS=1;
+MIRROR=0;
+MIRROR_PATH=/tmp;
 
-prep_fillrandom1 () {
-	ARGS="--db=$STORE --benchmarks=$BENCHMARKS --num=$NUM --use_existing_db=$USE_DB --threads=$THREADS";
+prep_fillrandom() {
+	ARGS="--db=$STORE --benchmarks=fillrandom --num=$NUM --use_existing_db=$USE_DB --threads=$THREADS --mirror=$MIRROR --mirror_path=$MIRROR_PATH";
 }
 
-prep_rwrandom1 () {
-	ARGS="--db=$STORE --benchmarks=$BENCHMARKS --num=$NUM --use_existing_db=$USE_DB --read_percent=$RRATIO --threads=$THREADS";
+
+READ_FROM=0;
+READ_UPTO=-1;
+WRITE_FROM=0;
+WRITE_UPTO=-1;
+BUFFER_SIZE=4194304;
+OPEN_FILES=1000;
+READ=-1;
+
+prep_rwrandom() {
+	ARGS="--db=$STORE --benchmarks=rwrandom --num=$NUM --use_existing_db=$USE_DB --read_percent=$RRATIO --threads=$THREADS --read_key_from=$READ_FROM --read_key_upto=$READ_UPTO --write_key_from=$WRITE_FROM --write_key_upto=$WRITE_UPTO --reads=$READS --write_buffer_size=$BUFFER_SIZE --open_files=$OPEN_FILES --bloom_bits=$BLOOM_BITS --mirror=$MIRROR --mirror_path=$MIRROR_PATH";
 }
 
-READ_RANGE=[0,100000]
-WRITE_RANGE=[0,100000]
-prep_rwrandom2 () {
-	ARGS="--db=$STORE --benchmarks=$BENCHMARKS --num=$NUM --use_existing_db=$USE_DB --read_percent=$RRATIO --threads=$THREADS --read_range=$READ_RANGE  --write_range=$WRITE_RANGE";
+rwrandom_orig() {
+	MIRROR=0;
+	BLOOM_BITS=10;
+	
+	prep_rwrandom;
+	$EXEC/db_bench $ARGS &
 }
 
-source $CONF; #test, benchmark, arguments
-prep_$TEST;
+rwrandom_mirror() {
+	MIRROR=1;
+	BLOOM_BITS=10;
+	
+	prep_rwrandom;
+	$EXEC/db_bench $ARGS &
+}
 
-echo "$EXEC on $STORE according to $CONF -> $OPATH"
-$ANALYZER -d "$DEVS" -o $OPATH -p "$EXEC/db_bench $ARGS"
+source $CONF; #test, arguments
+$TEST;
+
+# sync
+wait;
+
+#echo "$EXEC on $STORE according to $CONF -> $OPATH"
+#$ANALYZER -d "$DEVS" -o $OPATH -p "
