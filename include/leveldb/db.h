@@ -12,6 +12,12 @@
 
 namespace leveldb {
 
+namespace config {
+extern int kTargetFileSize;
+extern int kL0_Size;     // in MB
+extern int kLevelRatio;  // enlarge the level size by ten when the db levels up
+}
+
 // Update Makefile if you change these
 static const int kMajorVersion = 1;
 static const int kMinorVersion = 12;

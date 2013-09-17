@@ -54,6 +54,7 @@ done
 
 cd $OPATH && sudo blktrace -d $FDEVS &
 eval "$EXEC" 2>&1 > $OPATH/p.out;
+sleep 1;
 sudo kill -15 `pgrep blktrace`;
 
 sleep 1;

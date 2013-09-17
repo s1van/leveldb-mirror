@@ -4,6 +4,10 @@
 
 #include <deque>
 #include <set>
+#include <string>
+#include <iostream>
+#include <cstring>
+
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -420,9 +424,10 @@ class PosixMmapFile : public WritableFile {
         page_size_(page_size) {
     assert((page_size & (page_size - 1)) == 0);
 
-
-    mfilename_ = std::string(MIRROR_PATH) + fname.substr(fname.find_last_of("/"));
-    mfp_ = new PosixMmapFile_(mfilename_, mfd, page_size);
+    if (MIRROR_ENABLE) {
+	mfilename_ = std::string(MIRROR_PATH) + fname.substr(fname.find_last_of("/"));
+    	mfp_ = new PosixMmapFile_(mfilename_, mfd, page_size);
+    }
     fp_ = new PosixMmapFile_(fname, fd, page_size);
     DEBUG_INFO(filename_);
 
@@ -566,16 +571,17 @@ class PosixEnv : public Env {
   virtual Status NewWritableFile(const std::string& fname,
                                  WritableFile** result) {
     Status s;
-    const std::string mfname = std::string(MIRROR_PATH) + fname.substr(fname.find_last_of("/"));
-    bool mirror = EXCLUDE_FILES(fname);
+    std::string mfname;
+    bool mirror = MIRROR_ENABLE ? EXCLUDE_FILES(fname) : false;
 
     DEBUG_INFO2(fname, mirror);
 
     const int fd = open(fname.c_str(), O_CREAT | O_RDWR | O_TRUNC, 0777);
     int mfd;
-    if (mirror)
+    if (mirror) {
+      mfname = std::string(MIRROR_PATH) + fname.substr(fname.find_last_of("/"));
       mfd = open(mfname.c_str(), O_CREAT | O_RDWR | O_TRUNC, 0777);
-    else
+    } else
       mfd = 1;
 
     if (fd < 0) {
@@ -618,12 +624,16 @@ class PosixEnv : public Env {
   virtual Status DeleteFile(const std::string& fname) {
     DEBUG_INFO(fname);
     Status result;
-    bool mirror = EXCLUDE_FILES(fname);
-    const std::string mfname = std::string(MIRROR_PATH) + fname.substr(fname.find_last_of("/"));
+    bool mirror = MIRROR_ENABLE ? EXCLUDE_FILES(fname) : false;
+    std::string mfname;
+    
+    if(mirror)
+	mfname = std::string(MIRROR_PATH) + fname.substr(fname.find_last_of("/"));
 
     if (unlink(fname.c_str()) != 0) {
       result = IOError(fname, errno);
     }
+
     if (mirror && unlink(mfname.c_str()) != 0) {
       result = IOError(fname, errno);
     }
@@ -664,7 +674,7 @@ class PosixEnv : public Env {
 
   virtual Status RenameFile(const std::string& src, const std::string& target) {
     Status result;
-    bool mirror = EXCLUDE_FILES(src);
+    bool mirror = MIRROR_ENABLE ? EXCLUDE_FILES(src) : false;
 
     const std::string msrc = std::string(MIRROR_PATH) + src.substr(src.find_last_of("/"));
     const std::string mtarget = std::string(MIRROR_PATH) + target.substr(target.find_last_of("/"));

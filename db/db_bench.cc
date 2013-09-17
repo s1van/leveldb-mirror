@@ -1106,6 +1106,12 @@ int main(int argc, char** argv) {
       MIRROR_ENABLE = n;
     } else if (strncmp(argv[i], "--mirror_path=", 14) == 0) {
       MIRROR_PATH = argv[i] + 14;
+    } else if (sscanf(argv[i], "--file_size=%d%c", &n, &junk) == 1) {
+      leveldb::config::kTargetFileSize = n * 1048576; // in MiB
+    } else if (sscanf(argv[i], "--level0_size=%d%c", &n, &junk) == 1) {
+      leveldb::config::kL0_Size = n;
+    } else if (sscanf(argv[i], "--level_ratio=%d%c", &n, &junk) == 1) {
+      leveldb::config::kLevelRatio = n;
     } else {
       fprintf(stderr, "Invalid flag '%s'\n", argv[i]);
       exit(1);
