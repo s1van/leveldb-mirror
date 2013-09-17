@@ -9,9 +9,11 @@ USE_DB=0;
 THREADS=1;
 MIRROR=0;
 MIRROR_PATH=/tmp;
+LEVEL_RATIO=10;
+FILE_SIZE=2;	# in MiB
 
 prep_fillrandom() {
-	ARGS="--db=$STORE --benchmarks=fillrandom --num=$NUM --use_existing_db=$USE_DB --threads=$THREADS --mirror=$MIRROR --mirror_path=$MIRROR_PATH";
+	ARGS="--db=$STORE --benchmarks=fillrandom --num=$NUM --use_existing_db=$USE_DB --threads=$THREADS --mirror=$MIRROR --mirror_path=$MIRROR_PATH --level_ratio=$LEVEL_RATIO --file_size=$FILE_SIZE";
 }
 
 
@@ -21,11 +23,11 @@ WRITE_FROM=0;
 WRITE_UPTO=-1;
 BUFFER_SIZE=4194304;
 OPEN_FILES=1000;
-READ=-1;
+READS=-1;
 
 prep_rwrandom() {
-	ARGS="--db=$STORE --benchmarks=rwrandom --num=$NUM --use_existing_db=$USE_DB --read_percent=$RRATIO --threads=$THREADS --read_key_from=$READ_FROM --read_key_upto=$READ_UPTO --write_key_from=$WRITE_FROM --write_key_upto=$WRITE_UPTO --reads=$READS --write_buffer_size=$BUFFER_SIZE --open_files=$OPEN_FILES --bloom_bits=$BLOOM_BITS --mirror=$MIRROR --mirror_path=$MIRROR_PATH";
-	echo $ARGS;
+	ARGS="--db=$STORE --benchmarks=rwrandom --num=$NUM --use_existing_db=$USE_DB --read_percent=$RRATIO --threads=$THREADS --read_key_from=$READ_FROM --read_key_upto=$READ_UPTO --write_key_from=$WRITE_FROM --write_key_upto=$WRITE_UPTO --write_buffer_size=$BUFFER_SIZE --open_files=$OPEN_FILES --bloom_bits=$BLOOM_BITS --mirror=$MIRROR --mirror_path=$MIRROR_PATH --level_ratio=$LEVEL_RATIO --file_size=$FILE_SIZE";
+	echo "$EXEC/db_bench $ARGS";
 }
 
 rwrandom_orig() {
@@ -43,6 +45,7 @@ rwrandom_mirror() {
 	prep_rwrandom;
 	$EXEC/db_bench $ARGS &
 }
+
 
 multi-instance() {
 	INSTANCE_NUM=$1;
@@ -65,7 +68,7 @@ source $CONF; #test, arguments
 $TEST $TAIL_PARAMS;
 
 # sync
-wait;
+#wait;
 
 #echo "$EXEC on $STORE according to $CONF -> $OPATH"
 #$ANALYZER -d "$DEVS" -o $OPATH -p "

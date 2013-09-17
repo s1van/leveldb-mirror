@@ -676,15 +676,17 @@ class PosixEnv : public Env {
     Status result;
     bool mirror = MIRROR_ENABLE ? EXCLUDE_FILES(src) : false;
 
-    const std::string msrc = std::string(MIRROR_PATH) + src.substr(src.find_last_of("/"));
-    const std::string mtarget = std::string(MIRROR_PATH) + target.substr(target.find_last_of("/"));
     DEBUG_INFO2(src + "\t" + target, mirror);
 
     if (rename(src.c_str(), target.c_str()) != 0) {
       result = IOError(src, errno);
     }
-    if (mirror && rename(msrc.c_str(), mtarget.c_str()) != 0) {
+    if (mirror) {
+    	const std::string msrc = std::string(MIRROR_PATH) + src.substr(src.find_last_of("/"));
+    	const std::string mtarget = std::string(MIRROR_PATH) + target.substr(target.find_last_of("/"));
+	if (rename(msrc.c_str(), mtarget.c_str()) != 0) {
           result = IOError(msrc, errno);
+	}
     }
     return result;
   }
