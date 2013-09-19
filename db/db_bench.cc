@@ -5,6 +5,7 @@
 #include <sys/types.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 #include "db/db_impl.h"
 #include "db/version_set.h"
 #include "leveldb/cache.h"
@@ -116,6 +117,8 @@ static int FLAGS_write_span = -1;
 static int FLAGS_read_from = 0;
 static int FLAGS_read_upto = -1;
 static int FLAGS_read_span = -1;
+
+static double FLAGS_countdown = -1;
 
 namespace leveldb {
 
@@ -854,11 +857,14 @@ class Benchmark {
     Status s;
     int64_t bytes = 0;
     bool isRead;
+	
+    time_t begin, now;
 
     int found = 0;
     int bnum = 0;
     batch.Clear();
 
+    time(&begin);
     int i = 0;
     for (i = 0; i < num_; i++) {
       char key[100];
@@ -892,15 +898,21 @@ class Benchmark {
         }
     	thread->stats.FinishedWriteOp();
       }
+      
+      if (FLAGS_countdown > 0 && (i+1) % 100 == 0) {
+	time(&now);
+	if (difftime(now, begin) > FLAGS_countdown)
+		break;
+      }
     }
 
     char msg[100];
-    snprintf(msg, sizeof(msg), "(%d of %d found)", found, num_);
+    snprintf(msg, sizeof(msg), "(%d of %d found)", found, i);
     thread->stats.AddMessage(msg);
 
     if (num_ != FLAGS_num) {
       char msg[100];
-      snprintf(msg, sizeof(msg), "(%d ops)", num_);
+      snprintf(msg, sizeof(msg), "(%d ops)", i);
       thread->stats.AddMessage(msg);
     }
 
@@ -1112,6 +1124,8 @@ int main(int argc, char** argv) {
       leveldb::config::kL0_Size = n;
     } else if (sscanf(argv[i], "--level_ratio=%d%c", &n, &junk) == 1) {
       leveldb::config::kLevelRatio = n;
+    } else if (sscanf(argv[i], "--countdown=%lf%c", &d, &junk) == 1) {
+      FLAGS_countdown = d;
     } else {
       fprintf(stderr, "Invalid flag '%s'\n", argv[i]);
       exit(1);
