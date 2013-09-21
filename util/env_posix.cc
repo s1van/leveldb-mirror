@@ -185,6 +185,19 @@ class PosixMmapReadableFile: public RandomAccessFile {
     //DEBUG_INFO3(filename_, offset, n);
     return s;
   }
+
+  int Prefetch() {
+    #define MEM_PAGE_SIZE 4096
+    uint64_t offset = 0;
+    volatile char fetch;
+    madvise(mmapped_region_, length_, MADV_SEQUENTIAL);
+    for(; offset < length_; offset += MEM_PAGE_SIZE) {
+      fetch = *(reinterpret_cast<char*>(mmapped_region_) + offset);
+    }
+    madvise(mmapped_region_, length_, MADV_SEQUENTIAL);
+    #undef MEM_PAGE_SIZE
+  }
+
 };
 
 // We preallocate up to an extra megabyte and use memcpy to append new
@@ -540,7 +553,7 @@ class PosixEnv : public Env {
   }
 
   virtual Status NewRandomAccessFile(const std::string& fname,
-                                     RandomAccessFile** result) {
+                                     RandomAccessFile** result, bool mirror) {
     DEBUG_INFO(fname);
     *result = NULL;
     Status s;
@@ -554,6 +567,9 @@ class PosixEnv : public Env {
         void* base = mmap(NULL, size, PROT_READ, MAP_SHARED, fd, 0);
         if (base != MAP_FAILED) {
           *result = new PosixMmapReadableFile(fname, base, size, &mmap_limit_);
+	  if (MIRROR_ENABLE && mirror) {
+		((PosixMmapReadableFile *)(*result))->Prefetch();
+	  }
         } else {
           s = IOError(fname, errno);
         }

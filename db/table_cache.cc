@@ -70,7 +70,7 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
     DEBUG_INFO2(fname, mirror);
     RandomAccessFile* file = NULL;
     Table* table = NULL;
-    s = env_->NewRandomAccessFile(fname, &file);
+    s = env_->NewRandomAccessFile(fname, &file, mirror);
     if (s.ok()) {
       s = Table::Open(*options_, file, file_size, &table);
     }
