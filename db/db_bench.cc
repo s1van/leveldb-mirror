@@ -952,7 +952,7 @@ class Benchmark {
     int rnum = (int)(((double)num_ * FLAGS_read_percent) / 100);
     for (i = 0; i < rnum; i++) {
       char key[100];
-      if (rwrandom_read_completed < (rwrandom_read_completed + rwrandom_write_completed) * FLAGS_read_percent / 100  + RW_RELAX) {
+      if (rwrandom_read_completed < (rwrandom_read_completed + rwrandom_write_completed) * (double)FLAGS_read_percent / 100  + RW_RELAX) {
         const int64_t k = thread->rand.Next64() % FLAGS_read_span;
         snprintf(key, sizeof(key), "%032ld", k);
         if (db_->Get(options, key, &value).ok()) {
@@ -1004,7 +1004,7 @@ class Benchmark {
 
     for (i = 0; i < wnum; i++) {
       char key[100];
-      if (rwrandom_write_completed < (rwrandom_read_completed + rwrandom_write_completed) * (100 - FLAGS_read_percent) / 100  + RW_RELAX) {
+      if (rwrandom_write_completed < (rwrandom_read_completed + rwrandom_write_completed) * ((double)(100 - FLAGS_read_percent) / 100)  + RW_RELAX) {
         const uint64_t k = FLAGS_write_from + (thread->rand.Next64() % FLAGS_write_span);
         char key[100];
         snprintf(key, sizeof(key), "%020ld", k);
