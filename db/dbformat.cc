@@ -12,7 +12,7 @@ namespace leveldb {
 namespace config {
 int kTargetFileSize = 2 * 1048576;
 int kL0_Size = 10;       // in MB
-int kLevelRatio = 10;    // enlarge the level size by ten when the db levels up
+int kLevelRatio = 10;    // enlarge the level size ten times when the db levels up
 }
 
 static uint64_t PackSequenceAndType(uint64_t seq, ValueType t) {

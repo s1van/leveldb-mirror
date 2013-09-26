@@ -110,15 +110,20 @@ static const char* FLAGS_db = NULL;
 static int FLAGS_read_percent = 100;
 
 //key range of requests in r/w benchmark
-static int FLAGS_write_from = 0;
-static int FLAGS_write_upto = -1;
-static int FLAGS_write_span = -1;
+static int64_t FLAGS_write_from = 0;
+static int64_t FLAGS_write_upto = -1;
+static int64_t FLAGS_write_span = -1;
 
-static int FLAGS_read_from = 0;
-static int FLAGS_read_upto = -1;
-static int FLAGS_read_span = -1;
+static int64_t FLAGS_read_from = 0;
+static int64_t FLAGS_read_upto = -1;
+static int64_t FLAGS_read_span = -1;
 
 static double FLAGS_countdown = -1;
+
+static int rwrandom_read_completed = 0;
+static int rwrandom_write_completed = 0;
+static const int RW_RELAX=163840;
+static const int RW_WAIT_MS=65536;
 
 namespace leveldb {
 
@@ -350,7 +355,7 @@ struct ThreadState {
 
   ThreadState(int index)
       : tid(index),
-        rand(1000 + index) {
+        rand( ((int) Env::Default()->NowMicros()/1000000 )+ index) {
   }
 };
 
@@ -634,13 +639,15 @@ class Benchmark {
     ThreadArg* arg = new ThreadArg[n];
     for (int i = 0; i < n; i++) {
       arg[i].bm = this;
+      if (method == &Benchmark::RWRandom_Write)
+         method = &Benchmark::RWRandom_Read;
+      if (method == &Benchmark::RWRandom && n == 2)
+         method = &Benchmark::RWRandom_Write;
       arg[i].method = method;
       arg[i].shared = &shared;
       arg[i].thread = new ThreadState(i);
       arg[i].thread->shared = &shared;
       Env::Default()->StartThread(ThreadBody, &arg[i]);
-      //if (method == &Benchmark::RWRandom)
-         //method = &Benchmark::ReadRandom;
     }
 
     shared.mu.Lock();
@@ -756,6 +763,7 @@ class Benchmark {
     options.write_buffer_size = FLAGS_write_buffer_size;
     options.max_open_files = FLAGS_open_files;
     options.filter_policy = filter_policy_;
+    options.compression = leveldb::kNoCompression;
     Status s = DB::Open(options, FLAGS_db, &db_);
     if (!s.ok()) {
       fprintf(stderr, "open error: %s\n", s.ToString().c_str());
@@ -870,17 +878,18 @@ class Benchmark {
       char key[100];
       isRead = ((thread->rand.Next() % 100) < FLAGS_read_percent);
       if (isRead) {
-        const int k = thread->rand.Next() % FLAGS_read_span;
-        snprintf(key, sizeof(key), "%016d", k);
+        const int64_t k = thread->rand.Next64() % FLAGS_read_span;
+        snprintf(key, sizeof(key), "%032ld", k);
         if (db_->Get(options, key, &value).ok()) {
               found++;
         }
         thread->stats.FinishedReadOp();
       }
       else {
-        const int k = FLAGS_write_from + (thread->rand.Next() % FLAGS_write_span);
+        const uint64_t k = FLAGS_write_from + (thread->rand.Next64() % FLAGS_write_span);
         char key[100];
-        snprintf(key, sizeof(key), "%016d", k);
+        snprintf(key, sizeof(key), "%020ld", k);
+	//fprintf(stderr, "%ld\t%s\n", k, key);
         batch.Put(key, gen.Generate(value_size_));
         bytes += value_size_ + strlen(key);
         bnum ++;
@@ -917,6 +926,118 @@ class Benchmark {
     }
 
     fprintf(stderr, "rwrandom completes %d ops\n", i);
+
+  }
+
+
+  void RWRandom_Read(ThreadState* thread) {
+    //fprintf(stderr, "RWRandom_Read starts\n");
+    ReadOptions options;
+    std::string value;
+
+    RandomGenerator gen;
+    WriteBatch batch;
+    Status s;
+    int64_t bytes = 0;
+    bool isRead;
+	
+    time_t begin, now;
+
+    int found = 0;
+    int bnum = 0;
+    batch.Clear();
+
+    time(&begin);
+    int i = 0;
+    int rnum = (int)(((double)num_ * FLAGS_read_percent) / 100);
+    for (i = 0; i < rnum; i++) {
+      char key[100];
+      if (rwrandom_read_completed < (rwrandom_read_completed + rwrandom_write_completed) * FLAGS_read_percent / 100  + RW_RELAX) {
+        const int64_t k = thread->rand.Next64() % FLAGS_read_span;
+        snprintf(key, sizeof(key), "%032ld", k);
+        if (db_->Get(options, key, &value).ok()) {
+              found++;
+        }
+        thread->stats.FinishedReadOp();
+	rwrandom_read_completed++;
+      }
+      else {
+	Env::Default()->SleepForMicroseconds(RW_WAIT_MS);
+      }
+      
+      if (FLAGS_countdown > 0 && (i+1) % 100 == 0) {
+	time(&now);
+	if (difftime(now, begin) > FLAGS_countdown)
+		break;
+      }
+    }
+
+    char msg[100];
+    snprintf(msg, sizeof(msg), "(%d of %d found)", found, i);
+    thread->stats.AddMessage(msg);
+
+    fprintf(stderr, "rwrandom completes %d read ops\n", i);
+
+  }
+
+  void RWRandom_Write(ThreadState* thread) {
+    //fprintf(stderr, "RWRandom_Write starts\n");
+    ReadOptions options;
+    std::string value;
+
+    RandomGenerator gen;
+    WriteBatch batch;
+    Status s;
+    int64_t bytes = 0;
+    bool isRead;
+	
+    time_t begin, now;
+
+    int found = 0;
+    int bnum = 0;
+    batch.Clear();
+
+    time(&begin);
+    int i = 0;
+    int wnum = (int)(((double)num_ * (100-FLAGS_read_percent)) / 100);
+    fprintf(stderr, "RWRandom_Write will write %d ops\n", wnum);
+
+    for (i = 0; i < wnum; i++) {
+      char key[100];
+      if (rwrandom_write_completed < (rwrandom_read_completed + rwrandom_write_completed) * (100 - FLAGS_read_percent) / 100  + RW_RELAX) {
+        const uint64_t k = FLAGS_write_from + (thread->rand.Next64() % FLAGS_write_span);
+        char key[100];
+        snprintf(key, sizeof(key), "%020ld", k);
+	//fprintf(stderr, "%ld\t%s\n", k, key);
+        batch.Put(key, gen.Generate(value_size_));
+        bytes += value_size_ + strlen(key);
+        bnum ++;
+
+        if (bnum == entries_per_batch_) {
+                bnum = 0;
+                s = db_->Write(write_options_, &batch);
+                batch.Clear();
+                if (!s.ok()) {
+                        fprintf(stderr, "put error: %s\n", s.ToString().c_str());
+                        exit(1);
+                }
+                thread->stats.AddBytes(bytes);
+                bytes = 0;
+        }
+    	thread->stats.FinishedWriteOp();
+	rwrandom_write_completed++;
+      } else {
+	Env::Default()->SleepForMicroseconds(RW_WAIT_MS);
+      }
+      
+      if (FLAGS_countdown > 0 && (i+1) % 100 == 0) {
+	time(&now);
+	if (difftime(now, begin) > FLAGS_countdown)
+		break;
+      }
+    }
+
+    fprintf(stderr, "rwrandom completes %d write ops\n", i);
 
   }
 
@@ -1067,6 +1188,7 @@ int main(int argc, char** argv) {
   for (int i = 1; i < argc; i++) {
     double d;
     int n;
+    int64_t n64;
     char junk;
     if (leveldb::Slice(argv[i]).starts_with("--benchmarks=")) {
       FLAGS_benchmarks = argv[i] + strlen("--benchmarks=");
@@ -1106,14 +1228,14 @@ int main(int argc, char** argv) {
       FLAGS_db = argv[i] + 5;
     } else if (sscanf(argv[i], "--read_percent=%d%c", &n, &junk) == 1) {
       FLAGS_read_percent = n;
-    } else if (sscanf(argv[i], "--read_key_from=%d%c", &n, &junk) == 1) {
-      FLAGS_read_from = n;
-    } else if (sscanf(argv[i], "--read_key_upto=%d%c", &n, &junk) == 1) {
-      FLAGS_read_upto = n;
-    } else if (sscanf(argv[i], "--write_key_from=%d%c", &n, &junk) == 1) {
-      FLAGS_write_from = n;
-    } else if (sscanf(argv[i], "--write_key_upto=%d%c", &n, &junk) == 1) {
-      FLAGS_write_upto = n;
+    } else if (sscanf(argv[i], "--read_key_from=%ld%c", &n64, &junk) == 1) {
+      FLAGS_read_from = n64;
+    } else if (sscanf(argv[i], "--read_key_upto=%ld%c", &n64, &junk) == 1) {
+      FLAGS_read_upto = n64;
+    } else if (sscanf(argv[i], "--write_key_from=%ld%c", &n64, &junk) == 1) {
+      FLAGS_write_from = n64;
+    } else if (sscanf(argv[i], "--write_key_upto=%ld%c", &n64, &junk) == 1) {
+      FLAGS_write_upto = n64;
     } else if (sscanf(argv[i], "--mirror=%d%c", &n, &junk) == 1) {
       MIRROR_ENABLE = n;
     } else if (strncmp(argv[i], "--mirror_path=", 14) == 0) {
@@ -1133,8 +1255,7 @@ int main(int argc, char** argv) {
   }
   FLAGS_read_span = FLAGS_read_upto - FLAGS_read_from;
   FLAGS_write_span = FLAGS_write_upto - FLAGS_write_from;
-  fprintf(stderr, "Range: %d %d\n", FLAGS_write_span, FLAGS_read_span);
-
+  fprintf(stderr, "Range: %ld(w) %ld(r)\n", FLAGS_write_span, FLAGS_read_span);
 
 
   // Choose a location for the test database if none given with --db=<path>

@@ -38,6 +38,13 @@ class Random {
     }
     return seed_;
   }
+  
+  uint64_t Next64() {
+	uint64_t upper = static_cast<uint64_t> (Next());
+	uint64_t lower = static_cast<uint64_t> (Next());
+	return ((upper << 32) + lower);
+  }
+
   // Returns a uniformly distributed value in the range [0..n-1]
   // REQUIRES: n > 0
   uint32_t Uniform(int n) { return Next() % n; }

@@ -27,24 +27,26 @@ OPEN_FILES=1000;
 READS=-1;
 
 prep_rwrandom() {
-	ARGS="--db=$STORE --benchmarks=rwrandom --num=$NUM --use_existing_db=$USE_DB --read_percent=$RRATIO --threads=$THREADS --read_key_from=$READ_FROM --read_key_upto=$READ_UPTO --write_key_from=$WRITE_FROM --write_key_upto=$WRITE_UPTO --write_buffer_size=$BUFFER_SIZE --open_files=$OPEN_FILES --bloom_bits=$BLOOM_BITS --mirror=$MIRROR --mirror_path=$MIRROR_PATH --level_ratio=$LEVEL_RATIO --file_size=$FILE_SIZE --histogram=1 --countdown=$COUNTDOWN";
+	ARGS="--db=$STORE --benchmarks=rwrandom --num=$NUM --use_existing_db=$USE_DB --read_percent=$RRATIO --threads=$THREADS --read_key_from=$READ_FROM --read_key_upto=$READ_UPTO --write_key_from=$WRITE_FROM --write_key_upto=$WRITE_UPTO --write_buffer_size=$BUFFER_SIZE --open_files=$OPEN_FILES --bloom_bits=$BLOOM_BITS --mirror=$MIRROR --mirror_path=$MIRROR_PATH --level_ratio=$LEVEL_RATIO --file_size=$FILE_SIZE --histogram=1 --countdown=$COUNTDOWN --compression_ratio=1";
 	echo "$EXEC/db_bench $ARGS";
 }
 
 rwrandom_orig() {
 	MIRROR=0;
 	BLOOM_BITS=10;
+	AWHILE=$1;
 	
 	prep_rwrandom;
-	$EXEC/db_bench $ARGS &
+	$EXEC/db_bench $ARGS && sleep $AWHILE &
 }
 
 rwrandom_mirror() {
 	MIRROR=1;
 	BLOOM_BITS=10;
+	AWHILE=$1;
 	
 	prep_rwrandom;
-	$EXEC/db_bench $ARGS &
+	$EXEC/db_bench $ARGS && sleep $AWHILE &
 }
 
 
@@ -56,12 +58,18 @@ multi-instance() {
 	MIRROR_ROOT=$MIRROR_PATH;
 
 	for i in `seq 1 $INSTANCE_NUM`; do
+		if [ "$BUFFER_SIZES" != "" ]; then
+			BUFFER_SIZE="$(echo $BUFFER_SIZES| awk -v ss=$i '{print $ss}')";
+			echo $BUFFER_SIZE
+		fi
+			echo $BUFFER_SIZE
+
 		MIRROR_PATH=$MIRROR_ROOT/${i};
 		STORE=$STORE_ROOT/${i};
 		echo $MIRROR_PATH $STORE;
 		mkdir -p $MIRROR_PATH $STORE;
 
-		$BENCHMARK;
+		$BENCHMARK $i;
 	done
 }
 
