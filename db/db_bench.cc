@@ -122,7 +122,7 @@ static double FLAGS_countdown = -1;
 
 static int rwrandom_read_completed = 0;
 static int rwrandom_write_completed = 0;
-static const int RW_RELAX=163840;
+static const int RW_RELAX=8192;
 static const int RW_WAIT_MS=65536;
 
 namespace leveldb {
@@ -879,7 +879,7 @@ class Benchmark {
       isRead = ((thread->rand.Next() % 100) < FLAGS_read_percent);
       if (isRead) {
         const int64_t k = thread->rand.Next64() % FLAGS_read_span;
-        snprintf(key, sizeof(key), "%032ld", k);
+        snprintf(key, sizeof(key), "%020ld", k);
         if (db_->Get(options, key, &value).ok()) {
               found++;
         }
@@ -954,7 +954,7 @@ class Benchmark {
       char key[100];
       if (rwrandom_read_completed < (rwrandom_read_completed + rwrandom_write_completed) * (double)FLAGS_read_percent / 100  + RW_RELAX) {
         const int64_t k = thread->rand.Next64() % FLAGS_read_span;
-        snprintf(key, sizeof(key), "%032ld", k);
+        snprintf(key, sizeof(key), "%020ld", k);
         if (db_->Get(options, key, &value).ok()) {
               found++;
         }

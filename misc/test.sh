@@ -34,19 +34,17 @@ prep_rwrandom() {
 rwrandom_orig() {
 	MIRROR=0;
 	BLOOM_BITS=10;
-	AWHILE=$1;
 	
 	prep_rwrandom;
-	$EXEC/db_bench $ARGS && sleep $AWHILE &
+	$EXEC/db_bench $ARGS &
 }
 
 rwrandom_mirror() {
 	MIRROR=1;
 	BLOOM_BITS=10;
-	AWHILE=$1;
 	
 	prep_rwrandom;
-	$EXEC/db_bench $ARGS && sleep $AWHILE &
+	$EXEC/db_bench $ARGS &
 }
 
 
@@ -69,7 +67,8 @@ multi-instance() {
 		echo $MIRROR_PATH $STORE;
 		mkdir -p $MIRROR_PATH $STORE;
 
-		$BENCHMARK $i;
+		$BENCHMARK;
+		sleep 1;
 	done
 }
 
