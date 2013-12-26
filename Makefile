@@ -20,8 +20,8 @@ include build_config.mk
 CFLAGS += -I. -I./include $(PLATFORM_CCFLAGS) $(OPT) -pthread
 CXXFLAGS += -I. -I./include $(PLATFORM_CXXFLAGS) $(OPT) -pthread
 
-LDFLAGS += $(PLATFORM_LDFLAGS)  -lprofiler -pthread
-LIBS += $(PLATFORM_LIBS) -lpthread -lprofiler -pthread
+LDFLAGS += $(PLATFORM_LDFLAGS) -pthread
+LIBS += $(PLATFORM_LIBS) -lpthread -pthread
 
 LIBOBJECTS = $(SOURCES:.cc=.o)
 MEMENVOBJECTS = $(MEMENV_SOURCES:.cc=.o)
