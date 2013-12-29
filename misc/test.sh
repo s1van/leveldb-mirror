@@ -10,8 +10,9 @@ THREADS=1;
 MIRROR=0;
 MIRROR_PATH=/tmp;
 LEVEL_RATIO=10;
-FILE_SIZE=2;	# in MiB
+FILE_SIZE=8;	# in MiB
 COUNTDOWN=-1;
+VALUE_SIZE=1024; # default 100
 
 prep_fillrandom() {
 	ARGS="--db=$STORE --benchmarks=fillrandom --num=$NUM --use_existing_db=$USE_DB --threads=$THREADS --mirror=$MIRROR --mirror_path=$MIRROR_PATH --level_ratio=$LEVEL_RATIO --file_size=$FILE_SIZEi --histogram=1";
@@ -27,7 +28,7 @@ OPEN_FILES=1000;
 READS=-1;
 
 prep_rwrandom() {
-	ARGS="--db=$STORE --benchmarks=rwrandom --num=$NUM --use_existing_db=$USE_DB --read_percent=$RRATIO --threads=$THREADS --read_key_from=$READ_FROM --read_key_upto=$READ_UPTO --write_key_from=$WRITE_FROM --write_key_upto=$WRITE_UPTO --write_buffer_size=$BUFFER_SIZE --open_files=$OPEN_FILES --bloom_bits=$BLOOM_BITS --mirror=$MIRROR --mirror_path=$MIRROR_PATH --level_ratio=$LEVEL_RATIO --file_size=$FILE_SIZE --histogram=1 --countdown=$COUNTDOWN --compression_ratio=1";
+	ARGS="--db=$STORE --benchmarks=rwrandom --num=$NUM --use_existing_db=$USE_DB --value_size=$VALUE_SIZE --read_percent=$RRATIO --threads=$THREADS --read_key_from=$READ_FROM --read_key_upto=$READ_UPTO --write_key_from=$WRITE_FROM --write_key_upto=$WRITE_UPTO --write_buffer_size=$BUFFER_SIZE --open_files=$OPEN_FILES --bloom_bits=$BLOOM_BITS --mirror=$MIRROR --mirror_path=$MIRROR_PATH --level_ratio=$LEVEL_RATIO --file_size=$FILE_SIZE --histogram=1 --countdown=$COUNTDOWN --compression_ratio=1";
 	echo "$EXEC/db_bench $ARGS";
 }
 

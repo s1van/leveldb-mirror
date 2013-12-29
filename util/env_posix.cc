@@ -157,19 +157,24 @@ class PosixMmapReadableFile: public RandomAccessFile {
   void* mmapped_region_;
   size_t length_;
   MmapLimiter* limiter_;
+  bool prefetch_;
 
  public:
   // base[0,length-1] contains the mmapped contents of the file.
   PosixMmapReadableFile(const std::string& fname, void* base, size_t length,
-                        MmapLimiter* limiter)
+                        MmapLimiter* limiter, bool prefetch = false)
       : filename_(fname), mmapped_region_(base), length_(length),
-        limiter_(limiter) {
+        limiter_(limiter), prefetch_(prefetch) {
     DEBUG_INFO(fname);
   }
 
   virtual ~PosixMmapReadableFile() {
-    munmap(mmapped_region_, length_);
-    limiter_->Release();
+	if (prefetch_) {
+		free(mmapped_region_);
+	} else {
+   		munmap(mmapped_region_, length_);
+	}
+	limiter_->Release();
   }
 
   virtual Status Read(uint64_t offset, size_t n, Slice* result,
@@ -184,18 +189,6 @@ class PosixMmapReadableFile: public RandomAccessFile {
     }
     //DEBUG_INFO3(filename_, offset, n);
     return s;
-  }
-
-  int Prefetch() {
-    #define MEM_PAGE_SIZE 4096
-    uint64_t offset = 0;
-    volatile char fetch;
-    madvise(mmapped_region_, length_, MADV_SEQUENTIAL);
-    for(; offset < length_; offset += MEM_PAGE_SIZE) {
-      fetch = *(reinterpret_cast<char*>(mmapped_region_) + offset);
-    }
-    madvise(mmapped_region_, length_, MADV_SEQUENTIAL);
-    #undef MEM_PAGE_SIZE
   }
 
 };
@@ -564,15 +557,18 @@ class PosixEnv : public Env {
       uint64_t size;
       s = GetFileSize(fname, &size);
       if (s.ok()) {
-        void* base = mmap(NULL, size, PROT_READ, MAP_SHARED, fd, 0);
-        if (base != MAP_FAILED) {
-          *result = new PosixMmapReadableFile(fname, base, size, &mmap_limit_);
-	  if (MIRROR_ENABLE && mirror) {
-		((PosixMmapReadableFile *)(*result))->Prefetch();
-	  }
-        } else {
-          s = IOError(fname, errno);
-        }
+	if (MIRROR_ENABLE && mirror) {
+        	void* base = (void*) malloc(size);
+		ssize_t ret = pread(fd, base, size, 0);
+          	*result = new PosixMmapReadableFile(fname, base, size, &mmap_limit_, true);
+	} else {
+        	void* base = mmap(NULL, size, PROT_READ, MAP_SHARED, fd, 0);
+        	if (base != MAP_FAILED) {
+          		*result = new PosixMmapReadableFile(fname, base, size, &mmap_limit_);
+        	} else {
+          		s = IOError(fname, errno);
+        	}
+	}
       }
       close(fd);
       if (!s.ok()) {
