@@ -62,7 +62,7 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
 
   if (*handle == NULL) {
     std::string fname;
-    if (mirror && MIRROR_ENABLE)
+    if (mirror && MIRROR_ENABLE && file_size > 65536)
       fname = TableFileName(MIRROR_PATH, file_number);
     else
       fname = TableFileName(dbname_, file_number);

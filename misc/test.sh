@@ -13,6 +13,7 @@ LEVEL_RATIO=10;
 FILE_SIZE=8;	# in MiB
 COUNTDOWN=-1;
 VALUE_SIZE=1024; # default 100
+BUFFER_SIZE=33554432;
 
 prep_fillrandom() {
 	ARGS="--db=$STORE --benchmarks=fillrandom --num=$NUM --use_existing_db=$USE_DB --threads=$THREADS --mirror=$MIRROR --mirror_path=$MIRROR_PATH --level_ratio=$LEVEL_RATIO --file_size=$FILE_SIZEi --histogram=1";
