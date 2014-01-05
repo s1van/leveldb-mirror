@@ -9,6 +9,7 @@
 #include <string>
 #include <stdint.h>
 #include <stdio.h>
+#include <time.h>
 #include <vector>
 #include "db/builder.h"
 #include "db/db_iter.h"
@@ -617,6 +618,9 @@ void DBImpl::BGWork(void* db) {
 }
 
 void DBImpl::BackgroundCall() {
+  struct timespec bg_delay = { .tv_sec = 0, .tv_nsec = 500000000 };
+  nanosleep(&bg_delay, NULL);
+  
   MutexLock l(&mutex_);
   assert(bg_compaction_scheduled_);
   if (!shutting_down_.Acquire_Load()) {
