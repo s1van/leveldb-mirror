@@ -6,6 +6,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <sys/types.h>
+#include <unistd.h>
+
 #include "db/db_impl.h"
 #include "db/version_set.h"
 #include "leveldb/cache.h"
@@ -125,6 +128,9 @@ static int rwrandom_write_completed = 0;
 static const int RW_RELAX=8192;
 static const int RW_WAIT_MS=65536;
 
+static const int MONITOR_INTERVAL = 2000000; //microseconds
+
+
 namespace leveldb {
 
 namespace {
@@ -197,7 +203,14 @@ class Stats {
   Histogram write_hist_;
   std::string message_;
 
+	Histogram intv_read_hist_;
+	Histogram intv_write_hist_;
+	double intv_start_;
+	double intv_end_;
+
  public:
+	int tid_;
+	int pid_;
   Stats() { Start(); }
 
   void Start() {
@@ -206,12 +219,15 @@ class Stats {
     hist_.Clear();
     read_hist_.Clear();
     write_hist_.Clear();
+		intv_read_hist_.Clear();
+		intv_write_hist_.Clear();
     done_ = 0;
     read_done_ = 0;
     write_done_ = 0;
     bytes_ = 0;
     seconds_ = 0;
     start_ = Env::Default()->NowMicros();
+		intv_start_ = Env::Default()->NowMicros();
     finish_ = start_;
     message_.clear();
   }
@@ -246,6 +262,7 @@ class Stats {
       double now = Env::Default()->NowMicros();
       double micros = now - last_op_finish_;
       read_hist_.Add(micros);
+      intv_read_hist_.Add(micros);	//ToDo: lock
     }
     read_done_++;
 
@@ -257,6 +274,7 @@ class Stats {
       double now = Env::Default()->NowMicros();
       double micros = now - last_op_finish_;
       write_hist_.Add(micros);
+      intv_write_hist_.Add(micros); //ToDo: lock
     }
     write_done_++;
 
@@ -287,6 +305,18 @@ class Stats {
       fprintf(stderr, "... finished %d ops%30s\r", done_, "");
       fflush(stderr);
     }
+
+		intv_end_ = Env::Default()->NowMicros();
+		if (intv_end_ - intv_start_ > MONITOR_INTERVAL) {
+      fprintf(stdout, "PID_TID_RL_WL_RT_WT\t%d\t%d\t%.2f\t%.2f\t%.2f\t%.2f\n", pid_, tid_,
+				intv_read_hist_.Average(), intv_write_hist_.Average(), 
+				intv_read_hist_.Num() * 1000000 /(intv_end_ - intv_start_),
+				intv_write_hist_.Num() * 1000000 /(intv_end_ - intv_start_));
+
+			intv_start_ = intv_end_;
+			intv_read_hist_.Clear();
+			intv_write_hist_.Clear();
+		}
   }
 
   void AddBytes(int64_t n) {
@@ -356,6 +386,8 @@ struct ThreadState {
   ThreadState(int index)
       : tid(index),
         rand( ((int) Env::Default()->NowMicros()/1000000 )+ index) {
+			stats.tid_ = index;
+			stats.pid_ = getpid();
   }
 };
 
@@ -635,6 +667,7 @@ class Benchmark {
     shared.num_initialized = 0;
     shared.num_done = 0;
     shared.start = false;
+
 
     ThreadArg* arg = new ThreadArg[n];
     for (int i = 0; i < n; i++) {

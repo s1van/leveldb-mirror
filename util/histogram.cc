@@ -66,6 +66,14 @@ void Histogram::Merge(const Histogram& other) {
   }
 }
 
+double Histogram::Sum() const {
+	return sum_;
+}
+
+double Histogram::Num() const {
+	return num_;
+}
+
 double Histogram::Median() const {
   return Percentile(50.0);
 }
