@@ -217,7 +217,7 @@ class WritableFile {
   virtual Status Append(const Slice& data) = 0;
   virtual Status Close() = 0;
   virtual Status Flush() = 0;
-  virtual Status Sync() = 0;
+  virtual Status Sync(int flags = 0) = 0;
 
  private:
   // No copying allowed

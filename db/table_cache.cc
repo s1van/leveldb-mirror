@@ -94,6 +94,7 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
       DEBUG_INFO2(fname, mirror);
     }
   }
+  DEBUG_INFO2("End of FindTable", file_number);
   return s;
 }
 
@@ -128,6 +129,8 @@ Iterator* TableCache::NewIterator(const ReadOptions& options,
   if (tableptr != NULL) {
     *tableptr = table;
   }
+
+  DEBUG_INFO2("End", file_number);
   return result;
 }
 
@@ -145,6 +148,7 @@ Status TableCache::Get(const ReadOptions& options,
     s = t->InternalGet(options, k, arg, saver);
     cache_->Release(handle);
   }
+  DEBUG_INFO2("End", file_number);
   return s;
 }
 

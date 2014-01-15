@@ -21,7 +21,7 @@ CFLAGS += -I. -I./include $(PLATFORM_CCFLAGS) $(OPT) -pthread
 CXXFLAGS += -I. -I./include $(PLATFORM_CXXFLAGS) $(OPT) -pthread
 
 LDFLAGS += $(PLATFORM_LDFLAGS) -pthread
-LIBS += $(PLATFORM_LIBS) -lpthread -pthread
+LIBS += $(PLATFORM_LIBS) -lpthread -pthread -lrt
 
 LIBOBJECTS = $(SOURCES:.cc=.o)
 MEMENVOBJECTS = $(MEMENV_SOURCES:.cc=.o)

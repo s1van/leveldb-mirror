@@ -36,9 +36,9 @@
 	} while(0)
 
 #define DEBUG_INFO3(_arg1, _arg2, _arg3)  do{	\
-		PRINT_CURRENT_TIME;	\
-		std::cout << "\t";	\
-		PRINT_LOC_INFO;		\
+		PRINT_CURRENT_TIME;		\
+		std::cout << "\t";		\
+		PRINT_LOC_INFO;			\
 		std::cout << _arg1 << "\t" 	\
 			<< _arg2 << "\t"	\
 			<< _arg3 << std::endl;	\

@@ -31,6 +31,7 @@
 #include "util/mutexlock.h"
 #include "util/posix_logger.h"
 #include "leveldb/mirror.h"
+#include "util/aio_wrapper.h"
 
 namespace leveldb {
 
@@ -158,13 +159,14 @@ class PosixMmapReadableFile: public RandomAccessFile {
   size_t length_;
   MmapLimiter* limiter_;
   bool prefetch_;
+	AIOWrapper* awp_;
 
  public:
   // base[0,length-1] contains the mmapped contents of the file.
   PosixMmapReadableFile(const std::string& fname, void* base, size_t length,
-                        MmapLimiter* limiter, bool prefetch = false)
+                        MmapLimiter* limiter, bool prefetch = false, AIOWrapper* awp = NULL)
       : filename_(fname), mmapped_region_(base), length_(length),
-        limiter_(limiter), prefetch_(prefetch) {
+        limiter_(limiter), prefetch_(prefetch), awp_(awp) {
     DEBUG_INFO(fname);
   }
 
@@ -174,12 +176,16 @@ class PosixMmapReadableFile: public RandomAccessFile {
 	} else {
    		munmap(mmapped_region_, length_);
 	}
+	if (awp_) delete awp_;
 	limiter_->Release();
   }
 
   virtual Status Read(uint64_t offset, size_t n, Slice* result,
                       char* scratch) const {
     //DEBUG_INFO3(filename_, offset, n);
+		if (prefetch_ && awp_ != NULL && !(awp_->isFinished()) )
+			awp_->wait();
+
     Status s;
     if (offset + n > length_) {
       *result = Slice();
@@ -346,7 +352,7 @@ class PosixMmapFile_ : public WritableFile {
     return Status::OK();
   }
 
-  virtual Status Sync() {
+  virtual Status Sync(int flags) {
     Status s;
 
     if (pending_sync_) {
@@ -363,7 +369,8 @@ class PosixMmapFile_ : public WritableFile {
       size_t p1 = TruncateToPageBoundary(last_sync_ - base_);
       size_t p2 = TruncateToPageBoundary(dst_ - base_ - 1);
       last_sync_ = dst_;
-      if (msync(base_ + p1, p2 - p1 + page_size_, MS_SYNC) < 0) {
+			if (flags == 0) flags = MS_SYNC;
+      if (msync(base_ + p1, p2 - p1 + page_size_, flags) < 0) {
         s = IOError(filename_, errno);
       }
     }
@@ -385,7 +392,7 @@ static void * mirrorCompactionHelper(void * arg) {
 			mfp = (PosixMmapFile_*) op->ptr1;	//get handler
 
 			if (op->type == MSync) {
-				mfp->Sync();
+				mfp->Sync(MS_SYNC);
 			} else if (op->type == MAppend) {
 				mfp->Append((const Slice&) op->ptr2);
 			}
@@ -476,17 +483,18 @@ class PosixMmapFile : public WritableFile {
     return Status::OK();
   }
 
-  virtual Status Sync() {
-    DEBUG_INFO2(filename_, mfilename_);
-    //Status s = mfp_->Sync();
+  virtual Status Sync(int flags) {
+    DEBUG_INFO3("Sync Starts", filename_, mfilename_);
+    //Status s = mfp_->Sync(MS_ASYNC);
     //if (!s.ok())
     //  return s;
     //OPQ_ADD_SYNC(mio_queue, mfp_);
-    Status s = fp_->Sync();
+    Status s = fp_->Sync(MS_SYNC);
     //pthread_join(*pt, NULL);
 
-    DEBUG_INFO2(filename_, mfilename_);
+    DEBUG_INFO3("Sync Ends", filename_, mfilename_);
     return s;
+		//return Status::OK();
   }
 };
 
@@ -557,11 +565,13 @@ class PosixEnv : public Env {
       uint64_t size;
       s = GetFileSize(fname, &size);
       if (s.ok()) {
-	if (MIRROR_ENABLE && mirror) {
-        	void* base = (void*) malloc(size);
-		ssize_t ret = pread(fd, base, size, 0);
-          	*result = new PosixMmapReadableFile(fname, base, size, &mmap_limit_, true);
-	} else {
+				if (MIRROR_ENABLE && mirror) {
+					void* base = (void*) malloc(size);
+					//ssize_t ret = pread(fd, base, size, 0);
+					AIOWrapper *awp = new AIOWrapper();
+					ssize_t ret = awp->read(fd, base, size, 0);
+					*result = new PosixMmapReadableFile(fname, base, size, &mmap_limit_, true, awp);
+				} else {
         	void* base = mmap(NULL, size, PROT_READ, MAP_SHARED, fd, 0);
         	if (base != MAP_FAILED) {
           		*result = new PosixMmapReadableFile(fname, base, size, &mmap_limit_);
@@ -570,6 +580,7 @@ class PosixEnv : public Env {
         	}
 	}
       }
+	if (!(MIRROR_ENABLE && mirror))	// to perform AIO, fd is closed later
       close(fd);
       if (!s.ok()) {
         mmap_limit_.Release();

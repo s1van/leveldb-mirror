@@ -873,6 +873,8 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   mutex_.Unlock();
 
   Iterator* input = versions_->MakeInputIterator(compact->compaction, MIRROR_ENABLE);
+	DEBUG_INFO("MakeInputIterator");
+
   input->SeekToFirst();
   Status status;
   ParsedInternalKey ikey;
