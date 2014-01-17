@@ -133,6 +133,7 @@ static leveldb::Histogram intv_read_hist_;
 static leveldb::Histogram intv_write_hist_;
 static double intv_start_;
 static leveldb::port::Mutex intv_mu_;
+static leveldb::port::Mutex rwrandom_read_mu_;
 
 namespace leveldb {
 
@@ -678,9 +679,9 @@ class Benchmark {
     ThreadArg* arg = new ThreadArg[n];
     for (int i = 0; i < n; i++) {
       arg[i].bm = this;
-      if (method == &Benchmark::RWRandom_Write)
+      if (method == &Benchmark::RWRandom_Write) // multiple read threads
          method = &Benchmark::RWRandom_Read;
-      if (method == &Benchmark::RWRandom && n == 2)
+      if (method == &Benchmark::RWRandom) // one write thread
          method = &Benchmark::RWRandom_Write;
       arg[i].method = method;
       arg[i].shared = &shared;
@@ -998,7 +999,10 @@ class Benchmark {
               found++;
         }
         thread->stats.FinishedReadOp();
-	rwrandom_read_completed++;
+
+				rwrandom_read_mu_.Lock();
+				rwrandom_read_completed++;
+				rwrandom_read_mu_.Unlock();
       }
       else {
 	Env::Default()->SleepForMicroseconds(RW_WAIT_MS);
