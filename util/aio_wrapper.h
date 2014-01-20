@@ -7,21 +7,23 @@
 #include <errno.h>
 #include <unistd.h>
 #include "leveldb/debug.h"
+#include "port/port.h"
 
 namespace leveldb {
 
 class AIOWrapper {
 private:
 	struct aiocb cb_;
-	bool finished;
+	bool finished_;
+	static int prefetch_counter_;
+	static port::Mutex mu_;
 
 	void reset() {
 		bzero( (char *)&cb_, sizeof(struct aiocb));
-		finished = false;
+		finished_ = false;
 	}
 	
 public:
-
 	AIOWrapper() {
 		reset();
 	}
@@ -36,6 +38,10 @@ public:
 		cb_.aio_offset = offset;		
 		ret = aio_read( &cb_);
 		if (ret < 0) perror("aio_read");
+		
+		mu_.Lock();
+		prefetch_counter_++;
+		mu_.Unlock();
 
 		DEBUG_INFO2("aio_read", fd);
 		return count; // optimistic
@@ -47,13 +53,31 @@ public:
 		DEBUG_INFO3("wait aio_read", cb_.aio_fildes, ret);
 		close(cb_.aio_fildes);	// file is closed after aio is completed
 		
+		mu_.Lock();
+		prefetch_counter_--;
+		mu_.Unlock();
+
 		reset();
-		finished = true;
+		finished_ = true;
 		return 1;
 	}
 
 	bool isFinished() {
-		return finished;
+		return finished_;
+	}
+
+	bool isCompleted() {
+		if (finished_) 
+			return true;
+		else 
+			if ( aio_error(&(cb_)) == EINPROGRESS )
+				return false;
+			else
+				return true;
+	}
+
+	static int getPrefetchingNum() {
+		return prefetch_counter_;
 	}
 
 };

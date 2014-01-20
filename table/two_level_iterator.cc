@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file. See the AUTHORS file for names of contributors.
 
+#include <queue>
 #include "table/two_level_iterator.h"
 
 #include "leveldb/table.h"
@@ -9,8 +10,12 @@
 #include "table/format.h"
 #include "table/iterator_wrapper.h"
 #include "leveldb/mirror.h"
+#include "util/aio_wrapper.h"
 
 namespace leveldb {
+
+int AIOWrapper::prefetch_counter_(0);
+port::Mutex AIOWrapper::mu_;
 
 namespace {
 
@@ -63,6 +68,8 @@ class TwoLevelIterator: public Iterator {
   void SkipEmptyDataBlocksBackward();
   void SetDataIterator(Iterator* data_iter);
   void InitDataBlock();
+  void PrefetchDataBlock();
+  void InitPrefetchedDataBlock();
 
   BlockFunction block_function_;
   void* arg_;
@@ -74,6 +81,12 @@ class TwoLevelIterator: public Iterator {
   // "index_value" passed to block_function_ to create the data_iter_.
   std::string data_block_handle_;
   bool mirror_;
+  bool prefetch_;
+	std::queue<Iterator*> prefetch_data_iter_;
+	std::queue<Slice> prefetch_handle_;
+	static const int max_prefetch_num_ = 2;
+	static const int max_op_before_prefetch_ = 1024;
+	int op_after_prefetch_;
 };
 
 TwoLevelIterator::TwoLevelIterator(
@@ -87,7 +100,9 @@ TwoLevelIterator::TwoLevelIterator(
       options_(options),
       index_iter_(index_iter),
       data_iter_(NULL),
-      mirror_(mirror) {
+			op_after_prefetch_(0),
+      mirror_(mirror),
+			prefetch_(mirror && HLSM_CPREFETCH) {
 }
 
 TwoLevelIterator::~TwoLevelIterator() {
@@ -102,7 +117,12 @@ void TwoLevelIterator::Seek(const Slice& target) {
 
 void TwoLevelIterator::SeekToFirst() {
   index_iter_.SeekToFirst();
-  InitDataBlock();
+	if (prefetch_)  {
+  	DEBUG_INFO("[Prefetch] SeekToFirst");
+		InitPrefetchedDataBlock();
+	} else
+  	InitDataBlock();
+
   if (data_iter_.iter() != NULL) data_iter_.SeekToFirst();
   SkipEmptyDataBlocksForward();
 }
@@ -117,6 +137,14 @@ void TwoLevelIterator::SeekToLast() {
 void TwoLevelIterator::Next() {
   assert(Valid());
   data_iter_.Next();
+	if (prefetch_) {
+  	DEBUG_INFO("[Prefetch] Next");
+		op_after_prefetch_++;
+		if (op_after_prefetch_ > max_op_before_prefetch_) {
+			PrefetchDataBlock();
+			op_after_prefetch_ = 0;
+		}
+	}
   SkipEmptyDataBlocksForward();
 }
 
@@ -129,13 +157,24 @@ void TwoLevelIterator::Prev() {
 
 void TwoLevelIterator::SkipEmptyDataBlocksForward() {
   while (data_iter_.iter() == NULL || !data_iter_.Valid()) {
-    // Move to next block
-    if (!index_iter_.Valid()) {
-      SetDataIterator(NULL);
-      return;
-    }
-    index_iter_.Next();
-    InitDataBlock();
+		if (prefetch_) {
+  		DEBUG_INFO("[Prefetch] SkipEmptyDataBlocksForward");
+			PrefetchDataBlock();
+			if (prefetch_handle_.size() == 0) {
+    	  SetDataIterator(NULL);
+    	  return;
+			}
+			InitPrefetchedDataBlock();
+		} else {
+    	// Move to next block
+    	if (!index_iter_.Valid()) {
+    	  SetDataIterator(NULL);
+    	  return;
+    	}
+    	index_iter_.Next();
+    	InitDataBlock();
+		}
+
     if (data_iter_.iter() != NULL) data_iter_.SeekToFirst();
   }
 }
@@ -174,6 +213,40 @@ void TwoLevelIterator::InitDataBlock() {
   }
 }
 
+void TwoLevelIterator::InitPrefetchedDataBlock() {
+	PrefetchDataBlock();
+	if (prefetch_handle_.size() == 0)
+    SetDataIterator(NULL);
+	else {
+    Slice handle = prefetch_handle_.front();
+    if (data_iter_.iter() != NULL && handle.compare(data_block_handle_) == 0) {
+			// data_iter_ is already constructed
+		} else {
+			prefetch_handle_.pop();
+			data_block_handle_.assign(handle.data(), handle.size());
+			SetDataIterator(prefetch_data_iter_.front());
+			prefetch_data_iter_.pop();
+		}
+	}
+}
+		
+
+void TwoLevelIterator::PrefetchDataBlock() {
+	if (!prefetch_) return;
+	while ( AIOWrapper::getPrefetchingNum() < max_prefetch_num_ && index_iter_.Valid() ) {
+		index_iter_.Next();
+		
+  	if (index_iter_.Valid()) {
+    	Slice handle = index_iter_.value();
+			DEBUG_INFO(handle.data());
+      Iterator* iter = (*block_function_)(arg_, options_, handle, mirror_);
+			prefetch_handle_.push(handle);
+			prefetch_data_iter_.push(iter);
+    }
+  }
+
+}
+
 }  // namespace
 
 Iterator* NewTwoLevelIterator(
@@ -182,7 +255,6 @@ Iterator* NewTwoLevelIterator(
     void* arg,
     const ReadOptions& options,
     const bool mirror) {
-  DEBUG_INFO(mirror);
   return new TwoLevelIterator(index_iter, block_function, arg, options, mirror);
 }
 

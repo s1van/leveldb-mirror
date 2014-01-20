@@ -259,7 +259,7 @@ class Stats {
       double now = Env::Default()->NowMicros();
       double micros = now - last_op_finish_;
       read_hist_.Add(micros);
-      intv_read_hist_.AtomicAdd(micros);	//ToDo: lock
+      intv_read_hist_.AtomicAdd(micros);	
     }
     read_done_++;
 
@@ -271,7 +271,7 @@ class Stats {
       double now = Env::Default()->NowMicros();
       double micros = now - last_op_finish_;
       write_hist_.Add(micros);
-      intv_write_hist_.AtomicAdd(micros); //ToDo: lock
+      intv_write_hist_.AtomicAdd(micros); 
     }
     write_done_++;
 
@@ -341,7 +341,7 @@ class Stats {
                (bytes_ / 1048576.0) / elapsed);
       extra = rate;
     }
-    AppendWithSpace(&extra, message_);
+    AppendWithSpace(&extra, message_);	// only involve one thread
 
     fprintf(stdout, "%-12s : %11.3f micros/op;\t%11.3f ops/s%s%s\n",
             name.ToString().c_str(),

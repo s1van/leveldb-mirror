@@ -485,11 +485,11 @@ class PosixMmapFile : public WritableFile {
 
   virtual Status Sync(int flags) {
     DEBUG_INFO3("Sync Starts", filename_, mfilename_);
-    //Status s = mfp_->Sync(MS_ASYNC);
-    //if (!s.ok())
-    //  return s;
+    Status s = mfp_->Sync(MS_SYNC);
+    if (!s.ok())
+      return s;
     //OPQ_ADD_SYNC(mio_queue, mfp_);
-    Status s = fp_->Sync(MS_SYNC);
+    //Status s = fp_->Sync(MS_SYNC);
     //pthread_join(*pt, NULL);
 
     DEBUG_INFO3("Sync Ends", filename_, mfilename_);
