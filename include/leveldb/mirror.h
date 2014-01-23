@@ -7,10 +7,9 @@
 #include <time.h>
 
 extern int MIRROR_ENABLE;
-extern char *MIRROR_PATH;
+extern const char *MIRROR_PATH;
 
-//#define HLSM_CPREFETCH true	//compaction
-#define HLSM_CPREFETCH false
+#define HLSM_CPREFETCH false //compaction
 
 #define EXCLUDE_FILE(fname_, str_)	((fname_.find(str_) == std::string::npos))
 

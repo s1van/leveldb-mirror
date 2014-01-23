@@ -16,7 +16,7 @@ VALUE_SIZE=1024; # default 100
 #BUFFER_SIZE=33554432;
 #BUFFER_SIZE=67108864;
 BUFFER_SIZE=134217728;
-THREADS=3;
+THREADS=6;
 
 prep_fillrandom() {
 	ARGS="--db=$STORE --benchmarks=fillrandom --num=$NUM --use_existing_db=$USE_DB --threads=$THREADS --mirror=$MIRROR --mirror_path=$MIRROR_PATH --level_ratio=$LEVEL_RATIO --file_size=$FILE_SIZE --histogram=1";

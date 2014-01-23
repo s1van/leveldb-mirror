@@ -43,7 +43,7 @@ using leveldb::WriteOptions;
 
 /****** declared in mirror.h ******/
 int MIRROR_ENABLE = 0;
-char *MIRROR_PATH = (char *) "/tmp";
+const char *MIRROR_PATH;
 
 extern "C" {
 
