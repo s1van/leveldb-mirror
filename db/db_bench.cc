@@ -125,7 +125,7 @@ static double FLAGS_countdown = -1;
 
 static int rwrandom_read_completed = 0;
 static int rwrandom_write_completed = 0;
-static const int RW_RELAX=8192;
+static const int RW_RELAX=131072;
 static const int RW_WAIT_MS=65536;
 
 static const int MONITOR_INTERVAL = 2000000; //microseconds

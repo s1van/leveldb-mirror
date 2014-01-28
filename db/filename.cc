@@ -8,6 +8,7 @@
 #include "db/dbformat.h"
 #include "leveldb/env.h"
 #include "util/logging.h"
+#include "leveldb/mirror.h"
 
 namespace leveldb {
 
@@ -26,7 +27,10 @@ static std::string MakeFileName(const std::string& name, uint64_t number,
 
 std::string LogFileName(const std::string& name, uint64_t number) {
   assert(number > 0);
-  return MakeFileName(name, number, "log");
+	if (HLSM_HDD_ONLY(std::string("0.log")))
+		return MakeFileName(std::string(MIRROR_PATH), number, "log");
+	else
+		return MakeFileName(name, number, "log");
 }
 
 std::string TableFileName(const std::string& name, uint64_t number) {

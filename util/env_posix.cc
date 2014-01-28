@@ -182,7 +182,7 @@ class PosixMmapReadableFile: public RandomAccessFile {
 
   virtual Status Read(uint64_t offset, size_t n, Slice* result,
                       char* scratch) const {
-    //DEBUG_INFO3(filename_, offset, n);
+    DEBUG_INFO3(filename_, offset, n);
 		if (prefetch_ && awp_ != NULL && !(awp_->isFinished()) )
 			awp_->wait();
 
@@ -193,7 +193,7 @@ class PosixMmapReadableFile: public RandomAccessFile {
     } else {
       *result = Slice(reinterpret_cast<char*>(mmapped_region_) + offset, n);
     }
-    //DEBUG_INFO3(filename_, offset, n);
+    DEBUG_INFO3(filename_, offset, n);
     return s;
   }
 
@@ -486,10 +486,10 @@ class PosixMmapFile : public WritableFile {
   virtual Status Sync(int flags) {
     DEBUG_INFO3("Sync Starts", filename_, mfilename_);
     Status s = mfp_->Sync(MS_SYNC);
-    if (!s.ok())
-      return s;
+    //if (!s.ok())
+    //  return s;
     //OPQ_ADD_SYNC(mio_queue, mfp_);
-    //Status s = fp_->Sync(MS_SYNC);
+    //s = fp_->Sync(MS_ASYNC);
     //pthread_join(*pt, NULL);
 
     DEBUG_INFO3("Sync Ends", filename_, mfilename_);
