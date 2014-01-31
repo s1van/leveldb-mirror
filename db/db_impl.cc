@@ -618,8 +618,8 @@ void DBImpl::BGWork(void* db) {
 }
 
 void DBImpl::BackgroundCall() {
-  struct timespec bg_delay = { .tv_sec = 0, .tv_nsec = 500000000 };
-  nanosleep(&bg_delay, NULL);
+  //struct timespec bg_delay = { .tv_sec = 0, .tv_nsec = 62500000 };
+  //nanosleep(&bg_delay, NULL);
   
   MutexLock l(&mutex_);
   assert(bg_compaction_scheduled_);

@@ -443,14 +443,14 @@ class PosixMmapFile : public WritableFile {
     }
     fp_ = new PosixMmapFile_(fname, fd, page_size);
     DEBUG_INFO(filename_);
-
+/*
     if (mirror_helper == NULL) {
         mirror_helper = (pthread_t *) malloc(sizeof(pthread_t));
 	mio_queue = OPQ_MALLOC;
 	OPQ_INIT(mio_queue);
         pthread_create(mirror_helper, NULL,  mirrorCompactionHelper, mio_queue);
 
-    }
+    } */
   }
 
 
@@ -485,16 +485,17 @@ class PosixMmapFile : public WritableFile {
 
   virtual Status Sync(int flags) {
     DEBUG_INFO3("Sync Starts", filename_, mfilename_);
+    //Status s = fp_->Sync(MS_ASYNC);
     Status s = mfp_->Sync(MS_SYNC);
     //if (!s.ok())
     //  return s;
     //OPQ_ADD_SYNC(mio_queue, mfp_);
-    //s = fp_->Sync(MS_ASYNC);
+    // Status s = fp_->Sync(MS_ASYNC);
     //pthread_join(*pt, NULL);
 
     DEBUG_INFO3("Sync Ends", filename_, mfilename_);
     return s;
-		//return Status::OK();
+	//return Status::OK();
   }
 };
 

@@ -123,9 +123,11 @@ static int64_t FLAGS_read_span = -1;
 
 static double FLAGS_countdown = -1;
 
+static double rwrandom_wspeed = 0;
+
 static int rwrandom_read_completed = 0;
 static int rwrandom_write_completed = 0;
-static const int RW_RELAX=131072;
+static const int RW_RELAX=8192;
 static const int RW_WAIT_MS=65536;
 
 static const int MONITOR_INTERVAL = 2000000; //microseconds
@@ -990,9 +992,15 @@ class Benchmark {
     time(&begin);
     int i = 0;
     int rnum = (int)(((double)num_ * FLAGS_read_percent) / 100);
+		if (rwrandom_wspeed > 0)
+			rnum = num_ * 10;
+
     for (i = 0; i < rnum; i++) {
       char key[100];
-      if (rwrandom_read_completed < (rwrandom_read_completed + rwrandom_write_completed) * (double)FLAGS_read_percent / 100  + RW_RELAX) {
+			time(&now);
+      if ( (rwrandom_wspeed > 0 && rwrandom_wspeed * difftime(now, begin) <= rwrandom_write_completed + RW_RELAX)||
+			(rwrandom_wspeed == 0 &&
+			rwrandom_read_completed < (rwrandom_read_completed + rwrandom_write_completed) * (double)FLAGS_read_percent / 100  + RW_RELAX)) {
         const int64_t k = thread->rand.Next64() % FLAGS_read_span;
         snprintf(key, sizeof(key), "%020ld", k);
         if (db_->Get(options, key, &value).ok()) {
@@ -1043,15 +1051,19 @@ class Benchmark {
     time(&begin);
     int i = 0;
     int wnum = (int)(((double)num_ * (100-FLAGS_read_percent)) / 100);
+		if (rwrandom_wspeed > 0)
+			wnum = num_ * 10;
     fprintf(stderr, "RWRandom_Write will write %d ops\n", wnum);
 
     for (i = 0; i < wnum; i++) {
       char key[100];
-      if (rwrandom_write_completed < (rwrandom_read_completed + rwrandom_write_completed) * ((double)(100 - FLAGS_read_percent) / 100)  + RW_RELAX) {
+			time(&now);
+      if ( (rwrandom_wspeed > 0 && rwrandom_wspeed * difftime(now, begin) > (rwrandom_write_completed-RW_RELAX) )|| 
+			(rwrandom_wspeed == 0 &&
+			rwrandom_write_completed < (rwrandom_read_completed + rwrandom_write_completed) * ((double)(100 - FLAGS_read_percent) / 100)  + RW_RELAX) ) {
         const uint64_t k = FLAGS_write_from + (thread->rand.Next64() % FLAGS_write_span);
         char key[100];
         snprintf(key, sizeof(key), "%020ld", k);
-	//fprintf(stderr, "%ld\t%s\n", k, key);
         batch.Put(key, gen.Generate(value_size_));
         bytes += value_size_ + strlen(key);
         bnum ++;
@@ -1299,6 +1311,9 @@ int main(int argc, char** argv) {
   FLAGS_read_span = FLAGS_read_upto - FLAGS_read_from;
   FLAGS_write_span = FLAGS_write_upto - FLAGS_write_from;
   fprintf(stderr, "Range: %ld(w) %ld(r)\n", FLAGS_write_span, FLAGS_read_span);
+	if (FLAGS_read_percent == -1) {
+		rwrandom_wspeed = FLAGS_num / FLAGS_countdown;
+	}
 
 
   // Choose a location for the test database if none given with --db=<path>

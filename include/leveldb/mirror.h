@@ -19,10 +19,10 @@ extern const char *MIRROR_PATH;
 	&& EXCLUDE_FILE(fname_, ".log") && EXCLUDE_FILE(fname_, "LOCK") : 0 ))
 
 // assume that .log will only be written, deleted, and renamed
-#define HLSM_HDD_ONLY(fname_)	((MIRROR_ENABLE ? 	\
+//#define HLSM_HDD_ONLY(fname_)	((MIRROR_ENABLE ? 	\
 	!EXCLUDE_FILE(fname_, ".log") : 0 ))		\
 
-//#define HLSM_HDD_ONLY(fname_)	0
+#define HLSM_HDD_ONLY(fname_)	0
 /************************** Asynchorous Mirror I/O *****************************/
 
 //1. Status Append(const Slice& data)
