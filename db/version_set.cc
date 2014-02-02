@@ -231,19 +231,19 @@ static Iterator* GetFileIterator(void* arg,
 }
 
 Iterator* Version::NewConcatenatingIterator(const ReadOptions& options,
-                                            int level) const {
+                                            int level, bool mirror) const {
   return NewTwoLevelIterator(
       new LevelFileNumIterator(vset_->icmp_, &files_[level]),
-      &GetFileIterator, vset_->table_cache_, options);
+      &GetFileIterator, vset_->table_cache_, options, mirror);
 }
 
 void Version::AddIterators(const ReadOptions& options,
-                           std::vector<Iterator*>* iters) {
+                           std::vector<Iterator*>* iters, bool mirror) {
   // Merge all level zero files together since they may overlap
   for (size_t i = 0; i < files_[0].size(); i++) {
     iters->push_back(
         vset_->table_cache_->NewIterator(
-            options, files_[0][i]->number, files_[0][i]->file_size));
+            options, files_[0][i]->number, files_[0][i]->file_size, NULL, mirror));
   }
 
   // For levels > 0, we can use a concatenating iterator that sequentially
@@ -251,7 +251,7 @@ void Version::AddIterators(const ReadOptions& options,
   // lazily.
   for (int level = 1; level < config::kNumLevels; level++) {
     if (!files_[level].empty()) {
-      iters->push_back(NewConcatenatingIterator(options, level));
+      iters->push_back(NewConcatenatingIterator(options, level, mirror));
     }
   }
 }

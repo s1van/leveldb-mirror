@@ -1034,7 +1034,7 @@ static void CleanupIteratorState(void* arg1, void* arg2) {
 }  // namespace
 
 Iterator* DBImpl::NewInternalIterator(const ReadOptions& options,
-                                      SequenceNumber* latest_snapshot) {
+                                      SequenceNumber* latest_snapshot, bool mirror) {
   IterState* cleanup = new IterState;
   mutex_.Lock();
   *latest_snapshot = versions_->LastSequence();
@@ -1047,7 +1047,7 @@ Iterator* DBImpl::NewInternalIterator(const ReadOptions& options,
     list.push_back(imm_->NewIterator());
     imm_->Ref();
   }
-  versions_->current()->AddIterators(options, &list);
+  versions_->current()->AddIterators(options, &list, mirror);
   Iterator* internal_iter =
       NewMergingIterator(&internal_comparator_, &list[0], list.size());
   versions_->current()->Ref();
@@ -1119,9 +1119,9 @@ Status DBImpl::Get(const ReadOptions& options,
   return s;
 }
 
-Iterator* DBImpl::NewIterator(const ReadOptions& options) {
+Iterator* DBImpl::NewIterator(const ReadOptions& options, bool mirror) {
   SequenceNumber latest_snapshot;
-  Iterator* internal_iter = NewInternalIterator(options, &latest_snapshot);
+  Iterator* internal_iter = NewInternalIterator(options, &latest_snapshot, mirror);
   return NewDBIterator(
       &dbname_, env_, user_comparator(), internal_iter,
       (options.snapshot != NULL
