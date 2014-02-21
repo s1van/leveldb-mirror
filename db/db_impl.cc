@@ -147,6 +147,9 @@ DBImpl::DBImpl(const Options& options, const std::string& dbname)
                              &internal_comparator_);
 }
 
+extern pthread_t *mirror_helper;
+extern opq mio_queue;
+
 DBImpl::~DBImpl() {
   // Wait for background work to finish
   mutex_.Lock();
@@ -159,6 +162,15 @@ DBImpl::~DBImpl() {
   if (db_lock_ != NULL) {
     env_->UnlockFile(db_lock_);
   }
+
+#ifdef USE_OPQ_THREAD
+	uint64_t primary_end_at = Env::Default()->NowMicros();
+	OPQ_ADD_HALT(mio_queue);	
+	if (mirror_helper != NULL) pthread_join(*mirror_helper, NULL);
+	uint64_t secondary_end_at = Env::Default()->NowMicros();
+	DEBUG_INFO3("MJoin", mirror_helper, (secondary_end_at - primary_end_at)/1000);
+	Log(options_.info_log, "MJoin takes %d ms", (secondary_end_at - primary_end_at)/1000);
+#endif
 
   delete versions_;
   if (mem_ != NULL) mem_->Unref();
@@ -174,6 +186,7 @@ DBImpl::~DBImpl() {
   if (owns_cache_) {
     delete options_.block_cache;
   }
+
 }
 
 Status DBImpl::NewDB() {
@@ -876,7 +889,7 @@ Status DBImpl::DoCompactionWork(CompactionState* compact) {
   // Release mutex while we're actually doing the compaction work
   mutex_.Unlock();
 
-  Iterator* input = versions_->MakeInputIterator(compact->compaction, MIRROR_ENABLE);
+  Iterator* input = versions_->MakeInputIterator(compact->compaction, MIRROR_ENABLE && COMPACT_READ_ON_SECONDARY);
 	DEBUG_INFO("MakeInputIterator");
 
   input->SeekToFirst();
@@ -1419,7 +1432,13 @@ Status DB::Delete(const WriteOptions& opt, const Slice& key) {
   return Write(opt, &batch);
 }
 
-DB::~DB() { }
+DB::~DB() {
+#ifdef USE_OPQ_THREAD
+	OPQ_ADD_HALT(mio_queue);	
+	DEBUG_INFO2("MJoin[~DB]", mirror_helper);
+	//if (mirror_helper != NULL) pthread_join(*mirror_helper, NULL);
+#endif
+}
 
 Status DB::Open(const Options& options, const std::string& dbname,
                 DB** dbptr) {

@@ -2,6 +2,7 @@
 #define DEBUG_LEVELDB_H
 
 #include <iostream>
+#include <stdio.h>
 #include <sys/time.h>
 
 //#define DEBUG_DUMP
@@ -9,16 +10,20 @@
 
 #ifdef DEBUG_DUMP
 
+#define PRINT_FINISH do {std::cout.flush();} while(0)
+
 #define PRINT_CURRENT_TIME	do {		\
 		struct timeval now;		\
 		gettimeofday(&now, NULL);	\
 		now.tv_sec = (now.tv_sec << 36) >> 36;		\
 		std::cout << now.tv_sec * 1000000 + now.tv_usec;\
+		PRINT_FINISH; \
 	} while(0)
 
 #define PRINT_LOC_INFO	do{	\
 		std::cout << "[" << __FUNCTION__ << ",\t"	\
 		<< __FILE__ << ": " << __LINE__ << "]";		\
+		PRINT_FINISH; \
 	} while(0)
 
 #define DEBUG_INFO(_str)  do{		\
@@ -26,6 +31,7 @@
 		std::cout << "\t";	\
 		PRINT_LOC_INFO;		\
 		std::cout << "\t" << _str << std::endl;	\
+		PRINT_FINISH; \
 	} while(0)
 
 #define DEBUG_INFO2(_arg1, _arg2)  do{	\
@@ -33,6 +39,7 @@
 		std::cout << "\t";	\
 		PRINT_LOC_INFO;		\
 		std::cout << _arg1 << "\t" << _arg2 << std::endl;\
+		PRINT_FINISH; \
 	} while(0)
 
 #define DEBUG_INFO3(_arg1, _arg2, _arg3)  do{	\
@@ -42,6 +49,7 @@
 		std::cout << _arg1 << "\t" 	\
 			<< _arg2 << "\t"	\
 			<< _arg3 << std::endl;	\
+		PRINT_FINISH; \
 	} while(0)
 
 #define DEBUG_META_VEC(_tag, _vec) do{		\

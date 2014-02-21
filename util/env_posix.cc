@@ -34,6 +34,8 @@
 #include "util/aio_wrapper.h"
 
 namespace leveldb {
+pthread_t *mirror_helper = NULL;//for compaction
+opq mio_queue = NULL;		//for helper
 
 namespace {
 
@@ -254,7 +256,7 @@ class PosixMmapFile_ : public WritableFile {
   }
 
   bool UnmapCurrentRegion() {
-    DEBUG_INFO(filename_);
+    //DEBUG_INFO(filename_);
       bool result = true;
       if (base_ != NULL) {
         if (last_sync_ < limit_) {
@@ -279,7 +281,7 @@ class PosixMmapFile_ : public WritableFile {
     }
 
     bool MapNewRegion() {
-    DEBUG_INFO(filename_);
+    //DEBUG_INFO(filename_);
       assert(base_ == NULL);
       if (ftruncate(fd_, file_offset_ + map_size_) < 0) {
         return false;
@@ -382,32 +384,54 @@ class PosixMmapFile_ : public WritableFile {
 static void * mirrorCompactionHelper(void * arg) {
 	opq mio_queue = (opq) arg;
 	mio_op op;
-  	PosixMmapFile_ *mfp;
-	struct timespec wtime = {0, 256};
+	PosixMmapFile_ *mfp;
+	struct timespec wtime = {0, 16000000}; //ToDo: interval
+	int c = 0;
 
+	DEBUG_INFO2("Run_Helper", mio_queue);
 	while(1) {
 		if (OPQ_NONEMPTY(mio_queue)) {
 
-			OPQ_POP(mio_queue, op);			//get operation
-			mfp = (PosixMmapFile_*) op->ptr1;	//get handler
+			OPQ_POP(mio_queue, op);			//operation
+			//DEBUG_INFO3("OPQ_POP", op->type, op);
 
 			if (op->type == MSync) {
-				mfp->Sync(MS_SYNC);
+				mfp = (PosixMmapFile_*) op->ptr1;	//file handler
+				//Status s = mfp->Sync(MS_ASYNC);
+				//DEBUG_INFO3("MSync[E]", mfp, s.ToString());
+
 			} else if (op->type == MAppend) {
-				mfp->Append((const Slice&) op->ptr2);
+				mfp = (PosixMmapFile_*) op->ptr1;	//file handler
+				//Status s = mfp->Append(*((const Slice *) op->ptr2));
+				free((void*) (((const Slice *) op->ptr2)->data() ));	//it is malloc-ed
+				delete ((Slice *) op->ptr2);
+				//DEBUG_INFO3("MAppend[E]", ((const Slice *) op->ptr2)->size(), s.ToString());
+
+			} else if (op->type == MClose) {
+				mfp = (PosixMmapFile_*) op->ptr1;	//file handler
+				Status s = mfp->Close();
+				//DEBUG_INFO3("MClose[E]", op, s.ToString());
+
+			} else if (op->type == MDelete) {
+				std::string *fname = (std::string*) (op->ptr1);
+				int ret = unlink(fname->c_str());
+				DEBUG_INFO2("MDelete[E]", fname);
+				delete fname;
+
+			} else if (op->type == MHalt) {
+				//DEBUG_INFO("MHalt");
+				break;
 			}
 
 			free(op);
 			continue;
 		}
-		//nanosleep(&wtime, NULL);
+		nanosleep(&wtime, NULL);
+		DEBUG_INFO2("Helper_count", c++);
 	}
 
   return NULL;
 }
-
-static pthread_t *mirror_helper = (pthread_t *)1; //NULL; 
-static opq mio_queue = NULL;
 
 class PosixMmapFile : public WritableFile {
  private:
@@ -422,10 +446,11 @@ class PosixMmapFile : public WritableFile {
 
   bool UnmapCurrentRegion() {
     DEBUG_INFO2(filename_, mfilename_);
-    return fp_->UnmapCurrentRegion() && mfp_->UnmapCurrentRegion();
+    return fp_->UnmapCurrentRegion(); //&& mfp_->UnmapCurrentRegion(); //ToDo
   }
 
   bool MapNewRegion() {
+    DEBUG_INFO2(filename_, mfilename_);
     return fp_->MapNewRegion() && mfp_->MapNewRegion();
   }
 
@@ -435,22 +460,18 @@ class PosixMmapFile : public WritableFile {
         fd_(fd),
         mfd_(mfd),
         page_size_(page_size) {
-    assert((page_size & (page_size - 1)) == 0);
+		assert((page_size & (page_size - 1)) == 0);
 
     if (MIRROR_ENABLE) {
-	mfilename_ = std::string(MIRROR_PATH) + fname.substr(fname.find_last_of("/"));
+			mfilename_ = std::string(MIRROR_PATH) + fname.substr(fname.find_last_of("/"));
     	mfp_ = new PosixMmapFile_(mfilename_, mfd, page_size);
     }
     fp_ = new PosixMmapFile_(fname, fd, page_size);
     DEBUG_INFO(filename_);
-/*
-    if (mirror_helper == NULL) {
-        mirror_helper = (pthread_t *) malloc(sizeof(pthread_t));
-	mio_queue = OPQ_MALLOC;
-	OPQ_INIT(mio_queue);
-        pthread_create(mirror_helper, NULL,  mirrorCompactionHelper, mio_queue);
 
-    } */
+#ifdef USE_OPQ_THREAD
+		INIT_HELPER_AND_QUEUE(mirror_helper, mio_queue);
+#endif
   }
 
 
@@ -461,21 +482,31 @@ class PosixMmapFile : public WritableFile {
   }
 
   virtual Status Append(const Slice& data) {
-    //DEBUG_INFO2(filename_, data.size());
-    Status s = mfp_->Append(data);
-    if (!s.ok())
-      return s;
-    //OPQ_ADD_APPEND(mio_queue, mfp_, &data);
-    s = fp_->Append(data);
-    //DEBUG_INFO2(filename_, data.size());
+		Slice *mdata = data.clone();
+    //DEBUG_INFO3(filename_, data.compare((*mdata)), data.size());
+#ifdef USE_OPQ_THREAD
+    OPQ_ADD_APPEND(mio_queue, mfp_, mdata);
+#else
+    Status ms = mfp_->Append(data);
+    if (!ms.ok())
+      return ms;
+#endif
+    Status s = fp_->Append(data);
+    //DEBUG_INFO3("OAppend[E]", data.compare((*mdata)), mdata->size());
     return s;
   }
 
   virtual Status Close() {
-    Status s = mfp_->Close();
-    if (!s.ok())
-      return s;
-    s = fp_->Close();
+#ifdef USE_OPQ_THREAD
+    OPQ_ADD_CLOSE(mio_queue, mfp_);
+#else
+    Status ms = mfp_->Close();
+    if (!ms.ok())
+      return ms;
+#endif
+    Status s = fp_->Close();
+		DEBUG_INFO3("OClose", mfp_, s.ToString());
+		fd_ = -1;
     return s;
   }
 
@@ -485,13 +516,14 @@ class PosixMmapFile : public WritableFile {
 
   virtual Status Sync(int flags) {
     DEBUG_INFO3("Sync Starts", filename_, mfilename_);
-    //Status s = fp_->Sync(MS_ASYNC);
-    Status s = mfp_->Sync(MS_SYNC);
-    //if (!s.ok())
-    //  return s;
-    //OPQ_ADD_SYNC(mio_queue, mfp_);
-    // Status s = fp_->Sync(MS_ASYNC);
-    //pthread_join(*pt, NULL);
+#ifdef USE_OPQ_THREAD
+    OPQ_ADD_SYNC(mio_queue, mfp_);
+#else
+    //Status ms = mfp_->Sync(MS_ASYNC);
+    //if (!ms.ok())
+    //return ms;
+#endif
+    Status s = fp_->Sync(MS_SYNC);
 
     DEBUG_INFO3("Sync Ends", filename_, mfilename_);
     return s;
@@ -559,7 +591,12 @@ class PosixEnv : public Env {
     DEBUG_INFO(fname);
     *result = NULL;
     Status s;
-    int fd = open(fname.c_str(), O_RDONLY);
+		
+		int flags = O_RDONLY;
+		//if (MIRROR_ENABLE && mirror)
+			//flags = flags | O_DIRECT; 
+
+    int fd = open(fname.c_str(), flags);
     if (fd < 0) {
       s = IOError(fname, errno);
     } else if (mmap_limit_.Acquire()) {
@@ -568,10 +605,10 @@ class PosixEnv : public Env {
       if (s.ok()) {
 				if (MIRROR_ENABLE && mirror) {
 					void* base = (void*) malloc(size);
-					//ssize_t ret = pread(fd, base, size, 0);
-					AIOWrapper *awp = new AIOWrapper();
-					ssize_t ret = awp->read(fd, base, size, 0);
-					*result = new PosixMmapReadableFile(fname, base, size, &mmap_limit_, true, awp);
+					ssize_t ret = pread(fd, base, size, 0);
+					//AIOWrapper *awp = new AIOWrapper();
+					//ssize_t ret = awp->read(fd, base, size, 0);
+					*result = new PosixMmapReadableFile(fname, base, size, &mmap_limit_, true, NULL);
 				} else {
         	void* base = mmap(NULL, size, PROT_READ, MAP_SHARED, fd, 0);
         	if (base != MAP_FAILED) {
@@ -598,15 +635,16 @@ class PosixEnv : public Env {
     std::string mfname;
     bool mirror = MIRROR_ENABLE ? EXCLUDE_FILES(fname) : false;
 
-    DEBUG_INFO2(fname, mirror);
-
     const int fd = open(fname.c_str(), O_CREAT | O_RDWR | O_TRUNC, 0777);
     int mfd;
     if (mirror) {
       mfname = std::string(MIRROR_PATH) + fname.substr(fname.find_last_of("/"));
-      mfd = open(mfname.c_str(), O_CREAT | O_RDWR | O_TRUNC, 0777);
-    } else
+      mfd = open(mfname.c_str(), O_CREAT | O_RDWR | O_TRUNC , 0777);
+			DEBUG_INFO3(fname, mfname, mirror);
+    } else {
       mfd = 1;
+			DEBUG_INFO2(fname, mirror);
+		}
 
     if (fd < 0) {
       *result = NULL;
@@ -622,7 +660,6 @@ class PosixEnv : public Env {
       }
     }
 
-    DEBUG_INFO2(fname, mirror);
     return s;
   }
 
@@ -646,21 +683,24 @@ class PosixEnv : public Env {
   }
 
   virtual Status DeleteFile(const std::string& fname) {
-    DEBUG_INFO(fname);
     Status result;
-    bool mirror = MIRROR_ENABLE ? EXCLUDE_FILES(fname) : false;
-    std::string mfname;
     
-    if(mirror)
-	mfname = std::string(MIRROR_PATH) + fname.substr(fname.find_last_of("/"));
-
     if (unlink(fname.c_str()) != 0) {
       result = IOError(fname, errno);
     }
 
-    if (mirror && unlink(mfname.c_str()) != 0) {
-      result = IOError(fname, errno);
-    }
+    bool mirror = MIRROR_ENABLE ? EXCLUDE_FILES(fname) : false;
+		if (mirror) {
+	    std::string	mfname = std::string(MIRROR_PATH) + fname.substr(fname.find_last_of("/"));
+#ifdef USE_OPQ_THREAD
+			INIT_HELPER_AND_QUEUE(mirror_helper, mio_queue);
+			OPQ_ADD_DELETE(mio_queue, new std::string(mfname) );
+#else
+			if (unlink(mfname.c_str()) != 0) {
+				result = IOError(fname, errno);
+			}
+#endif
+		}
     DEBUG_INFO(fname);
     return result;
   }
@@ -696,6 +736,7 @@ class PosixEnv : public Env {
     return s;
   }
 
+	//ToDo: Add to OPQ
   virtual Status RenameFile(const std::string& src, const std::string& target) {
     Status result;
     bool mirror = MIRROR_ENABLE ? EXCLUDE_FILES(src) : false;
@@ -708,9 +749,9 @@ class PosixEnv : public Env {
     if (mirror) {
     	const std::string msrc = std::string(MIRROR_PATH) + src.substr(src.find_last_of("/"));
     	const std::string mtarget = std::string(MIRROR_PATH) + target.substr(target.find_last_of("/"));
-	if (rename(msrc.c_str(), mtarget.c_str()) != 0) {
-          result = IOError(msrc, errno);
-	}
+			if (rename(msrc.c_str(), mtarget.c_str()) != 0) {
+				result = IOError(msrc, errno);
+			}
     }
     return result;
   }
@@ -893,7 +934,7 @@ void PosixEnv::StartThread(void (*function)(void* arg), void* arg) {
   state->user_function = function;
   state->arg = arg;
   PthreadCall("start thread",
-              pthread_create(&t, NULL,  &StartThreadWrapper, state));
+		pthread_create(&t, NULL,  &StartThreadWrapper, state));
 }
 
 }  // namespace

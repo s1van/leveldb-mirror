@@ -127,8 +127,8 @@ static double rwrandom_wspeed = 0;
 
 static int rwrandom_read_completed = 0;
 static int rwrandom_write_completed = 0;
-static const int RW_RELAX=8192;
-static const int RW_WAIT_MS=65536;
+static const int RW_RELAX=1024;
+static const int RW_WAIT_MS=8192;
 
 static const int MONITOR_INTERVAL = 2000000; //microseconds
 static leveldb::Histogram intv_read_hist_;
