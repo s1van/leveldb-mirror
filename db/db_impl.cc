@@ -164,12 +164,14 @@ DBImpl::~DBImpl() {
   }
 
 #ifdef USE_OPQ_THREAD
-	uint64_t primary_end_at = Env::Default()->NowMicros();
-	OPQ_ADD_HALT(mio_queue);	
-	if (mirror_helper != NULL) pthread_join(*mirror_helper, NULL);
-	uint64_t secondary_end_at = Env::Default()->NowMicros();
-	DEBUG_INFO3("MJoin", mirror_helper, (secondary_end_at - primary_end_at)/1000);
-	Log(options_.info_log, "MJoin takes %d ms", (secondary_end_at - primary_end_at)/1000);
+	if (MIRROR_ENABLE) {
+		uint64_t primary_end_at = Env::Default()->NowMicros();
+		OPQ_ADD_HALT(mio_queue);	
+		if (mirror_helper != NULL) pthread_join(*mirror_helper, NULL);
+		uint64_t secondary_end_at = Env::Default()->NowMicros();
+		DEBUG_INFO3("MJoin", mirror_helper, (secondary_end_at - primary_end_at)/1000);
+		Log(options_.info_log, "MJoin takes %d ms", (secondary_end_at - primary_end_at)/1000);
+	}
 #endif
 
   delete versions_;
@@ -1434,9 +1436,11 @@ Status DB::Delete(const WriteOptions& opt, const Slice& key) {
 
 DB::~DB() {
 #ifdef USE_OPQ_THREAD
-	OPQ_ADD_HALT(mio_queue);	
-	DEBUG_INFO2("MJoin[~DB]", mirror_helper);
-	//if (mirror_helper != NULL) pthread_join(*mirror_helper, NULL);
+	if (MIRROR_ENABLE) {
+		OPQ_ADD_HALT(mio_queue);	
+		DEBUG_INFO2("MJoin[~DB]", mirror_helper);
+		//if (mirror_helper != NULL) pthread_join(*mirror_helper, NULL);
+	}	
 #endif
 }
 

@@ -61,11 +61,10 @@ Status TableCache::FindTable(uint64_t file_number, uint64_t file_size,
     *handle = cache_->Lookup(key);
 
   if (*handle == NULL) {
-    std::string fname;
-    if (mirror && MIRROR_ENABLE && file_size > 65536)
-      fname = TableFileName(MIRROR_PATH, file_number);
-    else
+    std::string fname = TableFileName(MIRROR_PATH, file_number);
+    if (!(mirror && MIRROR_ENABLE && file_size > 65536 && !FileNameHash::inuse(fname))) {
       fname = TableFileName(dbname_, file_number);
+    }
 
     DEBUG_INFO2(fname, mirror);
     RandomAccessFile* file = NULL;

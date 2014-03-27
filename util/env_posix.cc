@@ -37,10 +37,17 @@ namespace leveldb {
 pthread_t *mirror_helper = NULL;//for compaction
 opq mio_queue = NULL;		//for helper
 
+uint32_t FileNameHash::hash[] = {0};
+
 namespace {
 
 static Status IOError(const std::string& context, int err_number) {
   return Status::IOError(context, strerror(err_number));
+}
+
+// Roundup x to a multiple of y
+static size_t Roundup(size_t x, size_t y) {
+  return ((x + y - 1) / y) * y;
 }
 
 class PosixSequentialFile: public SequentialFile {
@@ -201,6 +208,87 @@ class PosixMmapReadableFile: public RandomAccessFile {
 
 };
 
+class PosixBufferFile_ : public WritableFile {
+ private:
+	int buffer_size_; 
+  std::string filename_;
+  int fd_;
+  char* base_;            // The mapped region
+  char* limit_;           // Limit of the mapped region
+  char* dst_;             // Where to write next  (in range [base_,limit_])
+  uint64_t file_offset_;  // Offset of base_ in file
+
+ public:
+  PosixBufferFile_(const std::string& fname, int fd)
+      : filename_(fname),
+        fd_(fd),
+        limit_(NULL),
+        dst_(NULL),
+        file_offset_(0) {
+		buffer_size_ = 4<<20;
+		base_ = (char*) memalign(BLKSIZE,buffer_size_); 
+		dst_ = base_;
+		limit_ = base_ + buffer_size_;
+    DEBUG_INFO2(fname, fd);
+		FileNameHash::add(filename_);
+  }
+
+
+  ~PosixBufferFile_() {
+    if (fd_ >= 0) {
+			FileNameHash::drop(filename_);
+      PosixBufferFile_::Close();
+    }
+  }
+
+  virtual Status Append(const Slice& data) {
+    const char* src = data.data();
+
+    size_t left = data.size();
+    while (left > 0) {
+      assert(base_ <= dst_);
+      assert(dst_ <= limit_);
+      size_t avail = limit_ - dst_;
+      if (avail == 0) {
+				OPQ_ADD_BUF_SYNC(mio_queue, base_, dst_-base_, fd_, file_offset_);		
+				file_offset_ += limit_ - base_;
+				base_ = (char*) memalign(BLKSIZE,buffer_size_); 
+				dst_ = base_;
+				limit_ = base_ + buffer_size_;
+      }
+		
+      size_t n = (left <= avail) ? left : avail;
+      memcpy(dst_, src, n);
+      dst_ += n;
+      src += n;
+      left -= n;
+    }
+
+    return Status::OK();
+  }
+
+  virtual Status Close() {
+    Status s;
+		OPQ_ADD_BUF_SYNC(mio_queue, base_, Roundup(dst_-base_, BLKSIZE), fd_, file_offset_);		
+		OPQ_ADD_TRUNCATE(mio_queue, fd_, file_offset_ + dst_-base_);
+		OPQ_ADD_BUF_CLOSE(mio_queue, fd_);
+
+    fd_ = -1;
+    base_ = NULL;
+    limit_ = NULL;
+    return s;
+  }
+
+  virtual Status Flush() {
+    return Status::OK();
+  }
+
+  virtual Status Sync(int flags) {
+
+    return Status::OK();
+  }
+};
+
 // We preallocate up to an extra megabyte and use memcpy to append new
 // data to the file.  This is safe since we either properly close the
 // file before reading from it, or for log files, the reading code
@@ -286,7 +374,7 @@ class PosixMmapFile_ : public WritableFile {
       if (ftruncate(fd_, file_offset_ + map_size_) < 0) {
         return false;
       }
-      void* ptr = mmap(NULL, map_size_, PROT_READ | PROT_WRITE, MAP_SHARED,
+      void* ptr = mmap(NULL, map_size_, PROT_READ | PROT_WRITE, MAP_SHARED ,
                        fd_, file_offset_);
       if (ptr == MAP_FAILED) {
         return false;
@@ -385,7 +473,7 @@ static void * mirrorCompactionHelper(void * arg) {
 	opq mio_queue = (opq) arg;
 	mio_op op;
 	PosixMmapFile_ *mfp;
-	struct timespec wtime = {0, 16000000}; //ToDo: interval
+	struct timespec wtime = {0, 128000000}; //ToDo: interval
 	int c = 0;
 
 	DEBUG_INFO2("Run_Helper", mio_queue);
@@ -397,12 +485,26 @@ static void * mirrorCompactionHelper(void * arg) {
 
 			if (op->type == MSync) {
 				mfp = (PosixMmapFile_*) op->ptr1;	//file handler
-				//Status s = mfp->Sync(MS_ASYNC);
+				Status s = mfp->Sync(MS_ASYNC);
 				//DEBUG_INFO3("MSync[E]", mfp, s.ToString());
+
+			} else if (op->type == MBufSync) {
+				char* buf = (char*) op->ptr1;	//buffer to sync
+				size_t size = op->size;	//buffer size
+				int fd = op->fd;	//file descriptor 
+				uint64_t offset = op->offset;	//corresponding offset
+				
+				ssize_t ret = pwrite(fd, buf, size, offset);
+				free(buf);
+
+			} else if (op->type == MTruncate) {
+				size_t size = op->size;	//file size
+				int fd = op->fd;	//file descriptor 
+				int ret = ftruncate(fd, size);
 
 			} else if (op->type == MAppend) {
 				mfp = (PosixMmapFile_*) op->ptr1;	//file handler
-				//Status s = mfp->Append(*((const Slice *) op->ptr2));
+				Status s = mfp->Append(*((const Slice *) op->ptr2));
 				free((void*) (((const Slice *) op->ptr2)->data() ));	//it is malloc-ed
 				delete ((Slice *) op->ptr2);
 				//DEBUG_INFO3("MAppend[E]", ((const Slice *) op->ptr2)->size(), s.ToString());
@@ -426,7 +528,9 @@ static void * mirrorCompactionHelper(void * arg) {
 			free(op);
 			continue;
 		}
-		nanosleep(&wtime, NULL);
+
+		OPQ_WAIT(mio_queue);
+		//nanosleep(&wtime, NULL);
 		DEBUG_INFO2("Helper_count", c++);
 	}
 
@@ -441,17 +545,29 @@ class PosixMmapFile : public WritableFile {
   int mfd_;
   size_t page_size_;
   PosixMmapFile_ *fp_;
-  PosixMmapFile_ *mfp_;
 
+#if !defined(COMPACT_SECONDARY_PWRITE)
+  PosixMmapFile_ *mfp_;
+#else
+  PosixBufferFile_ *mfp_;
+#endif
 
   bool UnmapCurrentRegion() {
     DEBUG_INFO2(filename_, mfilename_);
-    return fp_->UnmapCurrentRegion(); //&& mfp_->UnmapCurrentRegion(); //ToDo
+#if !defined(COMPACT_SECONDARY_PWRITE)
+    return fp_->UnmapCurrentRegion() && mfp_->UnmapCurrentRegion(); //ToDo
+#else
+    return fp_->UnmapCurrentRegion(); 
+#endif
   }
 
   bool MapNewRegion() {
     DEBUG_INFO2(filename_, mfilename_);
+#if !defined(COMPACT_SECONDARY_PWRITE)
     return fp_->MapNewRegion() && mfp_->MapNewRegion();
+#else
+    return fp_->MapNewRegion(); 
+#endif
   }
 
  public:
@@ -464,14 +580,18 @@ class PosixMmapFile : public WritableFile {
 
     if (MIRROR_ENABLE) {
 			mfilename_ = std::string(MIRROR_PATH) + fname.substr(fname.find_last_of("/"));
+#if !defined(COMPACT_SECONDARY_PWRITE)
     	mfp_ = new PosixMmapFile_(mfilename_, mfd, page_size);
+#else
+    	mfp_ = new PosixBufferFile_(mfilename_, mfd);
+#endif
+
+#ifdef USE_OPQ_THREAD
+			INIT_HELPER_AND_QUEUE(mirror_helper, mio_queue);
+#endif
     }
     fp_ = new PosixMmapFile_(fname, fd, page_size);
     DEBUG_INFO(filename_);
-
-#ifdef USE_OPQ_THREAD
-		INIT_HELPER_AND_QUEUE(mirror_helper, mio_queue);
-#endif
   }
 
 
@@ -482,9 +602,10 @@ class PosixMmapFile : public WritableFile {
   }
 
   virtual Status Append(const Slice& data) {
+#if defined(USE_OPQ_THREAD) && !defined(COMPACT_SECONDARY_PWRITE)
 		Slice *mdata = data.clone();
     //DEBUG_INFO3(filename_, data.compare((*mdata)), data.size());
-#ifdef USE_OPQ_THREAD
+    //DEBUG_MEASURE(OPQ_ADD_APPEND(mio_queue, mfp_, mdata), "Append_Queue_Time");
     OPQ_ADD_APPEND(mio_queue, mfp_, mdata);
 #else
     Status ms = mfp_->Append(data);
@@ -497,7 +618,7 @@ class PosixMmapFile : public WritableFile {
   }
 
   virtual Status Close() {
-#ifdef USE_OPQ_THREAD
+#if defined(USE_OPQ_THREAD) && !defined(COMPACT_SECONDARY_PWRITE)
     OPQ_ADD_CLOSE(mio_queue, mfp_);
 #else
     Status ms = mfp_->Close();
@@ -516,12 +637,12 @@ class PosixMmapFile : public WritableFile {
 
   virtual Status Sync(int flags) {
     DEBUG_INFO3("Sync Starts", filename_, mfilename_);
-#ifdef USE_OPQ_THREAD
+#if defined(USE_OPQ_THREAD) && !defined(COMPACT_SECONDARY_PWRITE)
     OPQ_ADD_SYNC(mio_queue, mfp_);
 #else
     //Status ms = mfp_->Sync(MS_ASYNC);
     //if (!ms.ok())
-    //return ms;
+    //	return ms;
 #endif
     Status s = fp_->Sync(MS_SYNC);
 
@@ -594,7 +715,7 @@ class PosixEnv : public Env {
 		
 		int flags = O_RDONLY;
 		//if (MIRROR_ENABLE && mirror)
-			//flags = flags | O_DIRECT; 
+		//	flags = flags | O_DIRECT; 
 
     int fd = open(fname.c_str(), flags);
     if (fd < 0) {
@@ -606,6 +727,8 @@ class PosixEnv : public Env {
 				if (MIRROR_ENABLE && mirror) {
 					void* base = (void*) malloc(size);
 					ssize_t ret = pread(fd, base, size, 0);
+					//void* base = (void*) memalign(BLKSIZE, Roundup(size, BLKSIZE) );
+					//ssize_t ret = pread(fd, base, Roundup(size, BLKSIZE), 0);
 					//AIOWrapper *awp = new AIOWrapper();
 					//ssize_t ret = awp->read(fd, base, size, 0);
 					*result = new PosixMmapReadableFile(fname, base, size, &mmap_limit_, true, NULL);
@@ -639,7 +762,11 @@ class PosixEnv : public Env {
     int mfd;
     if (mirror) {
       mfname = std::string(MIRROR_PATH) + fname.substr(fname.find_last_of("/"));
+#ifdef COMPACT_SECONDARY_PWRITE
+      mfd = open(mfname.c_str(), O_CREAT | O_RDWR | O_TRUNC| O_DIRECT , 0777);
+#else
       mfd = open(mfname.c_str(), O_CREAT | O_RDWR | O_TRUNC , 0777);
+#endif
 			DEBUG_INFO3(fname, mfname, mirror);
     } else {
       mfd = 1;

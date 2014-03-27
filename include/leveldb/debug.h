@@ -26,6 +26,21 @@
 		PRINT_FINISH; \
 	} while(0)
 
+#define DEBUG_MEASURE(func, tag) do{		\
+		PRINT_CURRENT_TIME; 	\
+		std::cout << "\t";	\
+		PRINT_LOC_INFO;		\
+		struct timeval before;	\
+		struct timeval after;	\
+		gettimeofday(&before, NULL);	\
+		before.tv_sec = (before.tv_sec << 36) >> 36;\
+		func;			\
+		gettimeofday(&after, NULL);	\
+		after.tv_sec = (after.tv_sec << 36) >> 36;\
+		std::cout << "\t" << tag << "\t" << (after.tv_sec - before.tv_sec) * 1000000 + after.tv_usec - before.tv_usec << std::endl;\
+		PRINT_FINISH; \
+	} while(0)
+
 #define DEBUG_INFO(_str)  do{		\
 		PRINT_CURRENT_TIME; 	\
 		std::cout << "\t";	\
@@ -70,6 +85,7 @@
 #define DEBUG_INFO2(_arg1, _arg2)
 #define DEBUG_INFO3(_arg1, _arg2, _arg3)
 #define DEBUG_META_VEC(_tag, _vec)
+#define DEBUG_MEASURE(func_, tag_)
 
 #endif  //DEBUG_DUMP
 
